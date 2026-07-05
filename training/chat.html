@@ -1,0 +1,3057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juno · Chat (Beta)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <link rel="stylesheet" href="/cursor-ui.css?v=27" />
+  <link rel="stylesheet" href="/cursor-layout.css?v=27" />
+  <style>
+    :root {
+      --bg0: #1e1e1e;
+      --bg1: #252526;
+      --bg2: #2d2d2d;
+      --glass: rgba(37, 37, 38, 0.95);
+      --glass2: #252526;
+      --border: rgba(255, 255, 255, 0.08);
+      --border2: rgba(255, 255, 255, 0.14);
+      --text: #cccccc;
+      --muted: #858585;
+      --accent: #3794ff;
+      --accent2: #4ec9b0;
+      --cyan: #4ec9b0;
+      --ok: #89d185;
+      --user-bg: #264f78;
+      --thread-max: 820px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      overflow: hidden;
+      background: var(--bg0);
+      font-size: 13px;
+    }
+
+    /* Subtle background — Cursor-like flat dark */
+    .bg-layer {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background: var(--bg0);
+    }
+    .bg-grid { display: none; }
+
+    .app {
+      position: relative; z-index: 1;
+      height: 100vh;
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
+      --sidebar-w: 0px;
+      --thread-max: 100%;
+      --rail-w: 48px;
+    }
+    /* Cursor Activity Bar — fixed, never clipped by chat panel */
+    .icon-rail {
+      position: fixed;
+      left: 0; top: 0; bottom: 0;
+      width: var(--rail-w);
+      background: #333333;
+      border-right: 1px solid #2b2b2b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: .4rem 0 .55rem;
+      gap: .15rem;
+      z-index: 300;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .rail-brand {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: #3794ff; color: #fff;
+      font-weight: 700; font-size: .78rem;
+      display: grid; place-items: center;
+      margin-bottom: .55rem; flex-shrink: 0;
+      border: none; cursor: pointer;
+    }
+    .rail-brand:hover { background: #4da3ff; }
+    .rail-divider {
+      width: 22px; height: 1px;
+      background: rgba(255,255,255,.1);
+      margin: .3rem 0; flex-shrink: 0;
+    }
+    .rail-spacer { flex: 1; min-height: .35rem; }
+    .icon-rail .rail-btn {
+      width: 36px; height: 36px;
+      border: none; border-radius: 6px;
+      background: transparent; color: #cccccc; cursor: pointer;
+      display: grid; place-items: center;
+      padding: 0;
+      transition: background .12s, color .12s;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .icon-rail .rail-btn svg {
+      width: 20px; height: 20px;
+      stroke: currentColor; fill: none;
+      stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .icon-rail .rail-label { display: none; }
+    .icon-rail .rail-btn:hover { background: rgba(255,255,255,.08); color: #fff; }
+    .icon-rail .rail-btn.active {
+      background: rgba(255,255,255,.1); color: #fff;
+      box-shadow: inset 2px 0 0 #3794ff;
+    }
+    .chat-panel {
+      margin-left: var(--rail-w);
+      width: calc(100% - var(--rail-w));
+      height: 100vh;
+      height: 100dvh;
+      min-width: 0; min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      background: var(--bg0);
+    }
+    .sidebar-overlay {
+      display: none; position: fixed; inset: 0; z-index: 90;
+      background: rgba(0,0,0,.45); backdrop-filter: blur(2px);
+    }
+    .sidebar-overlay.show { display: block; }
+
+    /* History flyout — slides from right edge (Cursor-style) */
+    .sidebar {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 272px;
+      z-index: 250;
+      transform: translateX(105%);
+      transition: transform .22s ease;
+      box-shadow: -8px 0 32px rgba(0,0,0,.45);
+      background: var(--bg1);
+      border-left: 1px solid var(--border);
+      border-right: none;
+      display: flex; flex-direction: column;
+    }
+    .app.sidebar-open .sidebar,
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    /* History sidebar — layout in cursor-layout.css (.cursor-history) */
+    .sessions { flex: 1; min-height: 0; overflow-y: auto; }
+
+    /* legacy avatar — hidden */
+    .juno-avatar, .user-avatar, .juno-glow, .juno-orbit { display: none !important; }
+
+    /* Main — flex column like Cursor agent panel */
+    .main {
+      flex: 1;
+      min-height: 0;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    /* Cursor panel header */
+    .panel-head {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .5rem;
+      padding: .35rem .65rem;
+      min-height: 36px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      background: var(--bg0);
+    }
+    .panel-head-left {
+      display: flex; align-items: center; gap: .25rem;
+      min-width: 0; flex: 1;
+    }
+    .panel-title-btn {
+      display: inline-flex; align-items: center; gap: .35rem;
+      border: none; background: transparent; color: #ccc;
+      font: inherit; font-size: .82rem; font-weight: 500;
+      padding: .25rem .4rem; border-radius: 6px;
+      cursor: pointer; min-width: 0; max-width: 100%;
+    }
+    .panel-title-btn:hover { background: rgba(255,255,255,.06); }
+    .panel-title-btn #chat-title {
+      margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      font-size: inherit; font-weight: inherit;
+    }
+    .panel-chevron { font-size: .55rem; opacity: .55; flex-shrink: 0; }
+    .panel-head-actions {
+      display: flex; align-items: center; gap: .15rem; flex-shrink: 0;
+    }
+    .head-icon-btn {
+      width: 28px; height: 28px; border: none; border-radius: 6px;
+      background: transparent; color: #858585; cursor: pointer;
+      display: grid; place-items: center; padding: 0;
+    }
+    .head-icon-btn:hover { background: rgba(255,255,255,.08); color: #ccc; }
+    .head-icon-btn svg {
+      width: 16px; height: 16px; stroke: currentColor; fill: none;
+      stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+    }
+    .head-menu-wrap { position: relative; }
+    .head-menu {
+      display: none; position: absolute; top: calc(100% + 4px); right: 0;
+      min-width: 160px; background: #252526; border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px; padding: .3rem; box-shadow: 0 8px 24px rgba(0,0,0,.45); z-index: 500;
+    }
+    .head-menu.open { display: block; }
+    .head-menu button {
+      display: block; width: 100%; text-align: left;
+      border: none; background: transparent; color: #ccc;
+      font: inherit; font-size: .8rem; padding: .45rem .55rem; border-radius: 6px; cursor: pointer;
+    }
+    .head-menu button:hover { background: rgba(255,255,255,.08); }
+    .mcp-badge { cursor: pointer; }
+    .mcp-badge:hover { color: #9cdcfe; border-color: rgba(55,148,255,.35); }
+    .top, .context-bar { display: none !important; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); animation: pulse-dot 2s ease infinite; }
+    .status-dot.no { background: #f87171; }
+    @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+    .model-badge {
+      font-size: .72rem; padding: .28rem .6rem; border-radius: 6px;
+      background: var(--bg2); border: 1px solid var(--border);
+      color: var(--muted); white-space: nowrap; font-family: ui-monospace, monospace;
+    }
+    .beta-badge {
+      font-size: .68rem; padding: .22rem .5rem; border-radius: 6px;
+      background: rgba(88, 166, 255, .12); border: 1px solid rgba(88, 166, 255, .35);
+      color: #79b8ff; font-weight: 600; letter-spacing: .03em; text-transform: uppercase;
+    }
+    .cap-pills, .skill-pills { display: none !important; }
+    #header-avatar { display: none; }
+
+    .messages-wrap {
+      flex: 1; min-height: 0;
+      overflow-y: auto; overflow-x: hidden;
+      position: relative;
+      scroll-behavior: smooth;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+      display: flex; flex-direction: column;
+    }
+    .messages-wrap::before {
+      content: ''; position: sticky; top: 0; left: 0; right: 0; height: 28px;
+      display: block; margin-bottom: -28px; z-index: 2; pointer-events: none;
+      background: linear-gradient(180deg, rgba(8,12,22,.85), transparent);
+    }
+    .messages-wrap::-webkit-scrollbar { width: 6px; }
+    .messages-wrap::-webkit-scrollbar-track { background: transparent; }
+    .messages-wrap::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.12);
+      border-radius: 99px;
+    }
+    .messages-wrap::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.22); }
+    .messages-wrap.streaming-active { scroll-behavior: auto !important; }
+    .messages {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      padding: .75rem 1rem 1.25rem;
+      display: flex; flex-direction: column; gap: 1rem;
+      flex: 1 0 auto;
+      min-height: min-content;
+    }
+    .messages:has(.welcome) {
+      flex: 1;
+      justify-content: flex-start;
+      align-items: stretch;
+      min-height: auto;
+      padding-top: 1.25rem;
+    }
+    .welcome {
+      margin: 0; text-align: left; max-width: 100%; width: 100%; padding: 0;
+      animation: fade-up .35s ease;
+    }
+    .welcome .juno-avatar.lg { display: none; }
+    .welcome h3 { margin: 0 0 .35rem; font-size: 1.1rem; font-weight: 600; color: var(--text); }
+    .welcome p { color: var(--muted); line-height: 1.55; margin: 0; font-size: .88rem; }
+    .scroll-fab {
+      position: absolute; bottom: 1rem; left: 50%; transform: translateX(-50%) translateY(80px);
+      opacity: 0; pointer-events: none;
+      background: var(--glass2); border: 1px solid var(--border2);
+      backdrop-filter: blur(12px); color: var(--text);
+      padding: .45rem .9rem; border-radius: 999px;
+      font: inherit; font-size: .78rem; font-weight: 600; cursor: pointer;
+      transition: transform .25s, opacity .25s; z-index: 4;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    .scroll-fab.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
+
+    /* Messages — Cursor turn layout */
+    .msg { display: flex; flex-direction: column; gap: .5rem; width: 100%; animation: msg-in .2s ease; }
+    .msg.user { align-items: flex-end; }
+    .msg.user .msg-body { display: flex; flex-direction: column; align-items: flex-end; width: 100%; }
+    .msg.assistant { max-width: 100%; }
+    .msg .msg-body { flex: 1; min-width: 0; width: 100%; }
+    .msg-meta, .think-label, .juno-dots { display: none !important; }
+
+    /* User query — Cursor pill */
+    .user-query {
+      align-self: flex-end;
+      max-width: 92%;
+      padding: .55rem .75rem;
+      border-radius: 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: .88rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .using-chip {
+      display: inline-flex; align-items: center; gap: .35rem;
+      font-size: .74rem; color: #b8b8b8;
+      padding: .32rem .5rem; border-radius: 6px;
+      background: rgba(55,148,255,.1); border: 1px solid rgba(55,148,255,.22);
+      margin-bottom: .35rem; cursor: default;
+    }
+    .using-chip .attach-view {
+      border: none; background: transparent; color: #858585;
+      cursor: pointer; padding: 0 .15rem; font-size: .72rem; line-height: 1;
+    }
+    .using-chip .attach-view:hover { color: #3794ff; }
+    .using-chip .attach-rm {
+      border: none; background: transparent; color: inherit;
+      cursor: pointer; opacity: .65; padding: 0 .1rem;
+    }
+    .using-chip .attach-rm:hover { opacity: 1; color: #f48771; }
+
+    .attach-menu-wrap { position: relative; }
+    .attach-menu {
+      display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: .35rem;
+      min-width: 148px; background: #252526; border: 1px solid rgba(255,255,255,.12);
+      border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); z-index: 60; overflow: hidden;
+    }
+    .attach-menu.open { display: block; }
+    .attach-menu button {
+      display: block; width: 100%; text-align: left; border: none; background: transparent;
+      color: #ccc; font: inherit; font-size: .78rem; padding: .5rem .65rem; cursor: pointer;
+    }
+    .attach-menu button:hover { background: rgba(255,255,255,.08); }
+
+    /* Drop overlay — drag files into chat */
+    .drop-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 450;
+      background: rgba(30,30,30,.72);
+      backdrop-filter: blur(4px);
+      align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .drop-overlay.show {
+      display: flex;
+      pointer-events: none;
+    }
+
+    /* Cursor-style path/file pills inside composer */
+    .composer-pills {
+      display: flex; flex-wrap: wrap; gap: .35rem;
+      padding: 0 0 .35rem 0; min-height: 0;
+    }
+    .composer-pills:empty { display: none; padding: 0; }
+    .composer-pill {
+      display: inline-flex; align-items: center; gap: .3rem;
+      max-width: min(340px, 92vw);
+      padding: .22rem .5rem .22rem .4rem;
+      border-radius: 6px;
+      background: rgba(56, 139, 253, 0.15);
+      border: 1px solid rgba(56, 139, 253, 0.35);
+      color: #79b8ff;
+      font-size: .74rem;
+      line-height: 1.35;
+      cursor: default;
+    }
+    .composer-pill .pill-icon { flex-shrink: 0; opacity: .85; font-size: .7rem; }
+    .composer-pill .pill-text {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+      font-size: .72rem;
+    }
+    .composer-pill button {
+      border: none; background: transparent; color: #79b8ff;
+      cursor: pointer; opacity: .65; padding: 0 .15rem; font-size: .85rem; line-height: 1;
+    }
+    .composer-pill button:hover { opacity: 1; }
+    .composer-input-row {
+      display: flex; flex-direction: column; width: 100%;
+    }
+    .drop-overlay-inner {
+      border: 2px dashed rgba(55,148,255,.55);
+      border-radius: 16px;
+      padding: 2.5rem 3rem;
+      text-align: center;
+      color: #ccc;
+      background: rgba(37,37,38,.85);
+    }
+    .drop-overlay-inner strong { display: block; font-size: 1rem; color: #3794ff; margin-bottom: .35rem; }
+    .drop-overlay-inner span { font-size: .82rem; color: #858585; }
+
+    /* Attachment preview drawer */
+    .attach-preview {
+      display: none;
+      position: fixed; right: 0; top: 0; bottom: 0; width: min(480px, 92vw);
+      z-index: 380; background: #1e1e1e;
+      border-left: 1px solid rgba(255,255,255,.1);
+      box-shadow: -8px 0 32px rgba(0,0,0,.45);
+      flex-direction: column;
+    }
+    .attach-preview.open { display: flex; }
+    .attach-preview-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .65rem .85rem; border-bottom: 1px solid rgba(255,255,255,.08);
+      font-size: .82rem; color: #ccc;
+    }
+    .attach-preview-head button {
+      border: none; background: transparent; color: #858585;
+      cursor: pointer; font-size: 1.1rem; padding: .2rem .4rem;
+    }
+    .attach-preview-body {
+      flex: 1; overflow: auto; margin: 0; padding: .75rem .85rem;
+      font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+      font-size: .76rem; line-height: 1.55; color: #d4d4d4;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    @keyframes msg-in { from { opacity: 0; } }
+    @keyframes fade-up { from { opacity: 0; transform: translateY(4px); } }
+
+    .msg-actions {
+      display: flex; gap: .25rem; margin-top: .45rem; opacity: 0;
+      transition: opacity .15s;
+    }
+    .msg:hover .msg-actions, .msg-actions:focus-within { opacity: 1; }
+    .msg-act {
+      border: 1px solid var(--border); background: rgba(255,255,255,.03);
+      color: var(--muted); font: inherit; font-size: .7rem; padding: .22rem .5rem;
+      border-radius: 8px; cursor: pointer; transition: all .15s;
+    }
+    .msg-act:hover { color: var(--text); border-color: var(--border2); background: rgba(255,255,255,.06); }
+    .followups {
+      display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .55rem;
+    }
+    .followup {
+      background: rgba(99,102,241,.08); border: 1px solid rgba(99,102,241,.2);
+      border-radius: 999px; padding: .38rem .75rem; font-size: .78rem;
+      color: #c7d2fe; cursor: pointer; transition: all .15s;
+    }
+    .followup:hover { background: rgba(99,102,241,.16); transform: translateY(-1px); }
+
+    .followups { display: none; }
+
+    /* Cursor tool pills */
+    .tool-stack { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .45rem; width: 100%; }
+    .cursor-tool {
+      display: flex; align-items: center; gap: .45rem;
+      padding: .4rem .6rem; border-radius: 10px;
+      background: var(--bg2); border: 1px solid var(--border);
+      font-size: .76rem; color: var(--muted);
+      transition: border-color .12s, background .12s;
+    }
+    .cursor-tool:hover { background: rgba(255,255,255,.04); }
+    .cursor-tool.active { border-color: rgba(55,148,255,.4); color: var(--text); background: rgba(55,148,255,.06); }
+    .cursor-tool.done { opacity: .8; }
+    .cursor-tool.error { border-color: rgba(244,135,113,.45); color: #f48771; }
+    .cursor-tool-icon {
+      width: 18px; height: 18px; border-radius: 4px;
+      background: rgba(255,255,255,.06);
+      display: grid; place-items: center;
+      flex-shrink: 0; font-size: .65rem;
+    }
+    .cursor-tool-label {
+      flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-size: .76rem;
+    }
+    .cursor-tool-tag { display: none; }
+    .cursor-status {
+      font-size: .74rem; color: var(--muted); margin-bottom: .2rem;
+      display: flex; align-items: center; gap: .35rem;
+      cursor: pointer; user-select: none; width: 100%;
+    }
+    .cursor-status:hover { color: #aaa; }
+    .cursor-status-dot {
+      width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
+      animation: pulse-dot 1.2s ease infinite; flex-shrink: 0;
+    }
+    .think-chevron {
+      margin-left: auto; font-size: .55rem; opacity: .45; flex-shrink: 0;
+    }
+    .think-stream {
+      font-size: .72rem; line-height: 1.58; color: #858585;
+      margin: 0 0 .4rem .75rem; padding: 0 0 .15rem .55rem;
+      border-left: 1px solid rgba(255,255,255,.1);
+      max-height: 0; overflow: hidden; opacity: 0;
+      transition: max-height .22s ease, opacity .18s ease, margin .18s ease;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .think-stream.open {
+      max-height: min(240px, 32vh); overflow-y: auto; opacity: 1;
+      margin-bottom: .45rem;
+    }
+    .think-stream.done { color: #6e6e6e; }
+    .tool-stack.finished .cursor-status-dot { background: var(--ok); animation: none; }
+    .tool-stack.finished .cursor-status { cursor: default; }
+    .finished-line {
+      font-size: .74rem; color: var(--muted); margin: .25rem 0 .35rem;
+      padding-left: .15rem;
+    }
+    .explored-line {
+      font-size: .72rem; color: var(--muted); margin-bottom: .35rem;
+    }
+    .attach-bar { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .45rem; min-height: 0; }
+    .attach-chip {
+      display: inline-flex; align-items: center; gap: .35rem;
+      font-size: .72rem; padding: .3rem .5rem; border-radius: 8px;
+      background: var(--bg2); border: 1px solid var(--border); color: var(--muted);
+    }
+    .bubble {
+      padding: 0; border-radius: 0; line-height: 1.65;
+      font-size: .88rem; white-space: pre-wrap; word-break: break-word;
+    }
+    .bubble.rich { white-space: normal; }
+    .bubble.rich p { margin: 0 0 .6rem; line-height: 1.72; }
+    .bubble.rich p:last-child { margin-bottom: 0; }
+    .bubble.rich .md-table-wrap { overflow-x: auto; margin: .55rem 0; }
+    .bubble.rich table {
+      width: 100%; border-collapse: collapse; font-size: .86rem;
+    }
+    .bubble.rich th, .bubble.rich td {
+      border: 1px solid rgba(148,163,184,.22);
+      padding: .45rem .6rem; text-align: left; vertical-align: top;
+    }
+    .bubble.rich th { background: rgba(99,102,241,.12); font-weight: 600; }
+    .bubble.rich strong { color: #e2e8f0; font-weight: 600; }
+    .bubble.rich code {
+      background: rgba(255,255,255,.08); padding: .1rem .35rem;
+      border-radius: 3px; font-size: .84em;
+      font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+      color: #ce9178;
+    }
+    .bubble.rich pre {
+      background: #1a1a1a; border: 1px solid var(--border);
+      border-radius: 8px; padding: .65rem .75rem; overflow-x: auto;
+      margin: .5rem 0; font-size: .78rem; line-height: 1.5;
+    }
+    .bubble.rich pre code { background: none; padding: 0; color: #d4d4d4; }
+    .msg.user .bubble { display: none; }
+    .msg.assistant .bubble {
+      background: transparent; border: none; padding: 0; box-shadow: none;
+    }
+    .bubble.streaming {
+      box-shadow: 0 4px 24px rgba(34,211,238,.05);
+    }
+    .bubble.streaming-live .stream-line {
+      color: #e8edf4;
+    }
+    .bubble .stream-body {
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0;
+    }
+    .bubble .stream-line {
+      margin: 0; flex: 1 1 auto; min-width: 0;
+      white-space: pre-wrap; word-break: break-word;
+      line-height: 1.72; letter-spacing: .01em;
+      font-size: .94rem;
+    }
+    .bubble .typing-cursor {
+      display: inline-block; flex-shrink: 0;
+      width: 7px; height: 7px; border-radius: 50%;
+      margin-left: 4px; align-self: center;
+      background: var(--cyan);
+      box-shadow: 0 0 8px rgba(34,211,238,.55);
+      animation: cursor-glow 1.1s ease-in-out infinite;
+    }
+    @keyframes cursor-glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .35; transform: scale(.75); }
+    }
+    .bubble.finalizing .finalize-in {
+      animation: rich-in .22s ease;
+    }
+    @keyframes rich-in { from { opacity: .88; } to { opacity: 1; } }
+    .think-label {
+      font-size: .78rem; color: var(--muted); margin-top: .35rem;
+      display: none; align-items: center; gap: .4rem;
+    }
+    .think-placeholder {
+      color: var(--muted); font-size: .88rem; margin: 0;
+      animation: think-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes think-pulse {
+      0%, 100% { opacity: .45; }
+      50% { opacity: .9; }
+    }
+    .think-label.show { display: flex; }
+    .think-label::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--cyan); animation: pulse-dot 1s ease infinite;
+    }
+
+    /* Composer — Cursor agent panel bottom */
+    .composer {
+      flex-shrink: 0; z-index: 20;
+      width: 100%;
+      padding: .35rem .75rem max(.5rem, env(safe-area-inset-bottom));
+      border-top: none;
+      background: var(--bg0);
+    }
+    .composer-inner {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+    }
+    .composer-context { margin-bottom: .35rem; }
+    .composer-tools { display: none; }
+    .composer-box {
+      display: flex; flex-direction: column; gap: 0;
+      background: #252526;
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 10px;
+      padding: .5rem .6rem .4rem;
+      min-height: 48px;
+      transition: border-color .12s;
+    }
+    .composer-row-top {
+      display: flex; align-items: flex-end; gap: .35rem; width: 100%;
+    }
+    .composer-input-row { width: 100%; }
+    .composer-toolbar {
+      display: flex; align-items: center; gap: .25rem;
+      width: 100%; margin-top: .35rem;
+    }
+    .composer-toolbar .toolbar-spacer { flex: 1; }
+    .composer-box:focus-within {
+      border-color: rgba(255,255,255,.16);
+      box-shadow: none; outline: none;
+    }
+    .composer-box.drag-over {
+      border-color: #3794ff !important;
+      box-shadow: 0 0 0 2px rgba(55,148,255,.28);
+      background: #2a2d2e;
+    }
+    #input, textarea {
+      flex: 1 1 auto; width: 100%; min-width: 0;
+      background: transparent; border: none; color: var(--text);
+      font: inherit; font-size: .88rem; resize: none;
+      height: 36px; min-height: 36px; max-height: 160px; line-height: 1.45;
+      padding: .35rem 0; box-sizing: border-box;
+      outline: none; box-shadow: none;
+    }
+    #input:focus, textarea:focus { outline: none; box-shadow: none; }
+    #input::placeholder { color: var(--muted); opacity: 1; }
+    .auto-badge {
+      font-size: .72rem; color: var(--muted); padding: .2rem .35rem;
+      user-select: none;
+    }
+    /* Mode picker */
+    .mode-picker-wrap { position: relative; flex-shrink: 0; }
+    .mode-picker-btn {
+      display: inline-flex; align-items: center; gap: .3rem;
+      border: none; background: transparent; color: var(--muted);
+      font: inherit; font-size: .78rem; padding: .3rem .4rem; border-radius: 6px;
+      cursor: pointer; white-space: nowrap;
+    }
+    .mode-picker-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
+    .mode-icon { font-size: .9rem; line-height: 1; }
+    .mode-chevron { font-size: .6rem; opacity: .6; }
+    .mode-menu {
+      display: none; position: absolute; bottom: calc(100% + 6px); left: 0;
+      min-width: 140px; background: var(--bg2); border: 1px solid var(--border2);
+      border-radius: 8px; padding: .3rem; box-shadow: 0 8px 24px rgba(0,0,0,.45); z-index: 500;
+    }
+    .mode-menu.open { display: block; }
+    .mode-opt {
+      display: flex; align-items: center; gap: .5rem; width: 100%;
+      border: none; background: transparent; color: var(--text);
+      font: inherit; font-size: .82rem; padding: .45rem .55rem; border-radius: 6px;
+      cursor: pointer; text-align: left;
+    }
+    .mode-opt:hover { background: rgba(255,255,255,.06); }
+    .mode-opt.active { background: rgba(55,148,255,.12); color: #9cdcfe; }
+    .mode-opt .mode-check { margin-left: auto; opacity: 0; font-size: .75rem; }
+    .mode-opt.active .mode-check { opacity: 1; }
+    .composer-toolbar #mode-label { display: none; }
+    .mode-picker-btn { padding: .2rem .3rem !important; }
+    .composer-footer { display: none; }
+    .composer-actions { display: flex; gap: .35rem; align-items: center; }
+    .btn-icon {
+      width: 32px; height: 32px; border-radius: 8px; border: none;
+      background: transparent; color: var(--muted); cursor: pointer;
+      display: grid; place-items: center; flex-shrink: 0; font-size: .95rem;
+    }
+    .btn-icon:hover { color: var(--text); background: rgba(255,255,255,.06); }
+    .send, .stop-btn {
+      width: 28px; height: 28px; border-radius: 50%; border: none;
+      color: var(--bg0); cursor: pointer;
+      display: grid; place-items: center; flex-shrink: 0;
+      transition: opacity .15s;
+    }
+    .send { background: var(--text); }
+    .stop-btn { background: #f48771; color: #fff; display: none; }
+    .stop-btn.show { display: grid; }
+    .send:hover:not(:disabled) { opacity: .85; }
+    .send:disabled { opacity: .3; cursor: not-allowed; }
+    .composer-inner {
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+    }
+
+    .top-btn {
+      border: 1px solid var(--border); background: rgba(255,255,255,.04);
+      color: var(--muted); border-radius: 10px; padding: .4rem .55rem;
+      font: inherit; font-size: .78rem; cursor: pointer;
+    }
+    .top-btn:hover { color: var(--text); border-color: var(--border2); }
+    .cap-pills { display: flex; gap: .28rem; margin-top: .22rem; flex-wrap: wrap; }
+    .cap-pill {
+      font-size: .62rem; padding: .12rem .42rem; border-radius: 999px;
+      border: 1px solid var(--border); color: #64748b; letter-spacing: .04em;
+      transition: all .15s;
+    }
+    .cap-pill.on {
+      color: #c7d2fe; border-color: rgba(109,124,255,.4);
+      background: rgba(109,124,255,.1);
+    }
+    .cap-pill.dim { opacity: .45; }
+    .skill-pills { display: flex; gap: .22rem; margin-top: .18rem; flex-wrap: wrap; }
+    .inject-pills { display: flex; gap: .22rem; margin: 0; flex-wrap: nowrap; flex-shrink: 0; }
+    .inject-pill {
+      font-size: .62rem; padding: .12rem .38rem; border-radius: 4px;
+      background: rgba(78,201,176,.08); color: #6ec9b8;
+      border: 1px solid rgba(78,201,176,.18);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .skill-pill {
+      font-size: .58rem; padding: .1rem .38rem; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.08); color: #64748b;
+      background: rgba(255,255,255,.02);
+    }
+    .skill-pill.loaded { color: #94a3b8; border-color: rgba(99,102,241,.25); }
+
+    /* Modal — high-contrast dark (readable inputs & dropdowns) */
+    .modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,.65);
+      display: none; place-items: center; z-index: 50;
+      backdrop-filter: blur(6px);
+    }
+    .modal.show { display: grid; }
+    .modal-card {
+      width: min(440px, 92vw);
+      background: #252526;
+      color: #e8e8e8;
+      color-scheme: dark;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px;
+      padding: 1.25rem 1.35rem;
+      box-shadow: 0 24px 64px rgba(0,0,0,.55);
+      animation: fade-up .25s ease;
+    }
+    .modal-card h3 { margin: 0 0 .5rem; font-size: 1rem; font-weight: 600; color: #f0f0f0; }
+    .modal-card p { margin: 0 0 1rem; color: #a0a0a0; font-size: .84rem; line-height: 1.55; }
+    .modal-card label {
+      display: block; font-size: .76rem; color: #b0b0b0;
+      margin: .75rem 0 .35rem; font-weight: 500;
+    }
+    .modal-card label:first-of-type { margin-top: 0; }
+    .modal-card input,
+    .modal-card select {
+      width: 100%;
+      box-sizing: border-box;
+      background: #3c3c3c;
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 6px;
+      padding: .55rem .7rem;
+      color: #f0f0f0;
+      font: inherit;
+      font-size: .84rem;
+      color-scheme: dark;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .modal-card select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23aaa' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right .65rem center;
+      padding-right: 2rem;
+      cursor: pointer;
+    }
+    .modal-card select option {
+      background: #252526;
+      color: #f0f0f0;
+    }
+    .modal-card input::placeholder { color: #777; opacity: 1; }
+    .modal-card input:focus,
+    .modal-card select:focus {
+      outline: none;
+      border-color: #3794ff;
+      box-shadow: 0 0 0 2px rgba(55,148,255,.28);
+    }
+    .modal-card input:disabled,
+    .modal-card select:disabled {
+      opacity: .55;
+      cursor: not-allowed;
+    }
+    #cfg-index-status { color: #909090 !important; }
+    .modal-card .btn {
+      border: none; border-radius: 6px; padding: .48rem .9rem;
+      font: inherit; font-size: .82rem; font-weight: 500; cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .modal-card .btn-ghost {
+      background: rgba(255,255,255,.07);
+      color: #d4d4d4;
+      border: 1px solid rgba(255,255,255,.14);
+    }
+    .modal-card .btn-ghost:hover {
+      background: rgba(255,255,255,.12);
+      color: #fff;
+    }
+    .modal-card .btn-primary {
+      background: #3794ff;
+      color: #fff;
+    }
+    .modal-card .btn-primary:hover { background: #4da3ff; }
+    .modal-actions { display: flex; gap: .5rem; margin-top: 1.1rem; justify-content: flex-end; }
+
+    /* Delete confirm — Cursor-style, not browser alert */
+    .modal.delete-modal { z-index: 400; }
+    .delete-modal-card {
+      width: min(360px, 92vw);
+      padding: 1.1rem 1.15rem 1rem;
+      border-radius: 12px;
+      background: #252526;
+      border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 16px 48px rgba(0,0,0,.55);
+    }
+    .delete-modal-card h3 {
+      margin: 0 0 .35rem;
+      font-size: .92rem;
+      font-weight: 600;
+      color: #e8e8e8;
+    }
+    .delete-modal-card p {
+      margin: 0 0 1rem;
+      font-size: .78rem;
+      color: #858585;
+      line-height: 1.5;
+    }
+    .delete-modal-card .delete-target {
+      color: #ccc;
+      font-weight: 500;
+      word-break: break-all;
+    }
+    .delete-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: .45rem;
+    }
+    .delete-modal-actions button {
+      border: none;
+      border-radius: 6px;
+      padding: .42rem .85rem;
+      font: inherit;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: background .12s, color .12s;
+    }
+    .delete-modal-cancel {
+      background: transparent;
+      color: #ccc;
+      border: 1px solid rgba(255,255,255,.12) !important;
+    }
+    .delete-modal-cancel:hover { background: rgba(255,255,255,.06); }
+    .delete-modal-confirm {
+      background: #c72e2e;
+      color: #fff;
+    }
+    .delete-modal-confirm:hover { background: #e03e3e; }
+
+    .toast {
+      position: fixed; bottom: 5.5rem; left: 50%; transform: translateX(-50%);
+      background: var(--glass2); border: 1px solid rgba(52,211,153,.35);
+      padding: .7rem 1.1rem; border-radius: 12px; display: none; z-index: 60;
+      font-size: .86rem; backdrop-filter: blur(12px);
+      box-shadow: 0 12px 32px rgba(0,0,0,.35);
+      animation: fade-up .2s ease;
+    }
+
+    .app.agent-focus .sidebar { display: none; }
+    .btn-focus {
+      border: 1px solid var(--border); background: rgba(255,255,255,.04);
+      color: var(--muted); border-radius: 8px; padding: .35rem .5rem;
+      font: inherit; font-size: .75rem; cursor: pointer;
+    }
+    .btn-focus:hover, .btn-focus.active { color: var(--text); background: rgba(55,148,255,.12); }
+    .friendly-list {
+      margin: .4rem 0 .5rem;
+      padding-left: 1.15rem;
+      line-height: 1.55;
+    }
+    .friendly-list li { margin: .2rem 0; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+    @media (max-width: 768px) {
+      .app { --rail-w: 48px; }
+      .chat-panel { margin-left: var(--rail-w); width: calc(100% - var(--rail-w)); }
+      .sidebar {
+        right: 0; left: auto;
+        width: min(300px, 92vw);
+        transform: translateX(105%);
+      }
+      .sidebar.open, .app.sidebar-open .sidebar { transform: translateX(0); }
+      .mobile-only { display: inline-flex !important; }
+    }
+    .mobile-only { display: none; }
+    .sr-only {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+    .btn-lock-inline { opacity: .7; }
+    .btn-lock-inline svg { display: block; }
+  </style>
+</head>
+<body>
+  <div class="bg-layer"></div>
+  <div class="bg-grid"></div>
+  <div class="drop-overlay" id="drop-overlay" aria-hidden="true">
+    <div class="drop-overlay-inner">
+      <strong>拖放文件或文件夹到此处</strong>
+      <span>松手附加 · 支持 @D:\路径 粘贴</span>
+    </div>
+  </div>
+
+  <aside class="attach-preview" id="attach-preview">
+    <div class="attach-preview-head">
+      <span id="attach-preview-title">—</span>
+      <button type="button" id="attach-preview-close" title="关闭">×</button>
+    </div>
+    <pre class="attach-preview-body" id="attach-preview-body"></pre>
+  </aside>
+
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <div class="app cursor-v3" id="app-root">
+    <nav class="icon-rail" aria-label="导航">
+      <button type="button" class="rail-brand" id="btn-rail-home" title="Juno 首页">J</button>
+      <button type="button" class="rail-btn" id="btn-rail-history" title="历史对话">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span class="rail-label">历史</span>
+      </button>
+      <button type="button" class="rail-btn" id="btn-rail-new" title="新对话">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="rail-label">新建</span>
+      </button>
+      <button type="button" class="rail-btn" id="btn-rail-explorer" title="资源管理器">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h5l2 2h11v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M3 7V5a2 2 0 0 1 2-2h5l2 2"/></svg>
+        <span class="rail-label">文件</span>
+      </button>
+      <div class="rail-divider" aria-hidden="true"></div>
+      <button type="button" class="rail-btn" id="btn-rail-subagent" title="子代理">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h5a3 3 0 0 1 3 3"/><path d="M16 12h2"/></svg>
+        <span class="rail-label">代理</span>
+      </button>
+      <button type="button" class="rail-btn" id="btn-rail-terminal" title="终端输出">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span class="rail-label">终端</span>
+      </button>
+      <button type="button" class="rail-btn" id="btn-rail-cmdk" title="Inline edit (Ctrl+K)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <span class="rail-label">编辑</span>
+      </button>
+      <div class="rail-spacer" aria-hidden="true"></div>
+      <button type="button" class="rail-btn" id="btn-rail-settings" title="模型设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <span class="rail-label">设置</span>
+      </button>
+    </nav>
+
+    <aside class="explorer-panel" id="explorer-panel" aria-label="资源管理器">
+      <div class="explorer-head">
+        <span>资源管理器</span>
+        <button type="button" id="explorer-refresh" title="刷新">↻</button>
+      </div>
+      <div class="explorer-tree" id="explorer-tree"></div>
+    </aside>
+
+    <div class="chat-panel">
+    <div class="main">
+      <header class="panel-head">
+        <div class="panel-head-left">
+          <button type="button" class="head-icon-btn" id="btn-panel-chat" title="会话">
+            <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </button>
+          <button type="button" class="panel-title-btn" id="btn-panel-title" title="切换会话">
+            <span id="chat-title">新对话</span>
+            <span class="panel-chevron">▾</span>
+          </button>
+        </div>
+        <div class="panel-head-actions">
+          <span class="beta-badge" title="Early preview — features may change">Beta</span>
+          <span id="model-badge" class="model-badge" style="display:none">—</span>
+          <span id="mcp-badge"></span>
+          <button type="button" class="head-icon-btn" id="btn-new-top" title="新对话">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button type="button" class="head-icon-btn" id="btn-panel-history" title="历史">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </button>
+          <div class="head-menu-wrap">
+            <button type="button" class="head-icon-btn" id="btn-settings-head" title="更多">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+            </button>
+            <div class="head-menu" id="head-menu">
+              <button type="button" data-action="settings">⚙ 模型设置</button>
+              <button type="button" data-action="mcp">🔌 MCP 服务器</button>
+              <button type="button" data-action="studio">📊 训练台</button>
+              <button type="button" data-action="rebuild">🔄 重建索引</button>
+              <button type="button" data-action="sync">☁ 同步知识库</button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <div class="sr-only" aria-hidden="true">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text"></span>
+        <div id="inject-pills"></div>
+        <div id="cap-pills"></div>
+        <div id="skill-pills"></div>
+      </div>
+
+      <div class="messages-wrap" id="messages-scroll">
+        <div class="messages" id="messages" aria-live="polite">
+          <div class="welcome" id="welcome">
+            <h3>你好，俊呈</h3>
+            <p>我是 Juno。Agent 可读代码，Ask 只读，Chat 纯对话。底部 ∞ 切换模式。</p>
+          </div>
+        </div>
+        <button class="scroll-fab" id="scroll-fab">↓ 回到底部</button>
+      </div>
+      <div class="subagent-panel" id="subagent-panel">
+        <div class="subagent-tabs" id="subagent-tabs"></div>
+        <div class="subagent-body" id="subagent-body"></div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="composer-inner">
+        <div class="composer-context">
+          <div class="review-bar" id="review-bar">
+            <div class="review-bar-files"><span class="review-bar-chevron">›</span> <span class="review-bar-count" id="review-files-count">0 Files</span></div>
+            <div class="review-bar-actions">
+              <button type="button" class="review-btn" id="review-btn-undo">Undo All</button>
+              <button type="button" class="review-btn" id="review-btn-keep">Keep All</button>
+              <button type="button" class="review-btn primary" id="review-btn-review">Review</button>
+            </div>
+          </div>
+          <div class="todo-inline" id="todo-inline"></div>
+          <div class="open-files-bar" id="open-files-bar"></div>
+          <div class="context-chips" id="context-chips"></div>
+          <div class="attach-bar" id="attach-bar"></div>
+        </div>
+        <div class="composer-box">
+          <div class="mention-menu" id="mention-menu"></div>
+          <div class="slash-menu" id="slash-menu"></div>
+          <div class="composer-input-row">
+            <div class="composer-pills" id="composer-pills"></div>
+            <textarea id="input" rows="1" placeholder="Plan, @ for context, / for commands · 拖入文件/文件夹"></textarea>
+          </div>
+          <div class="composer-toolbar">
+            <div class="mode-picker-wrap">
+              <button type="button" class="mode-picker-btn" id="btn-mode" title="切换模式">
+                <span class="mode-icon" id="mode-icon">∞</span>
+                <span id="mode-label">Agent</span>
+                <span class="mode-chevron">▾</span>
+              </button>
+              <div class="mode-menu" id="mode-menu">
+                <button type="button" class="mode-opt active" data-mode="agent"><span>∞</span> Agent<span class="mode-check">✓</span></button>
+                <button type="button" class="mode-opt" data-mode="plan"><span>◈</span> Plan<span class="mode-check">✓</span></button>
+                <button type="button" class="mode-opt" data-mode="ask"><span>👁</span> Ask<span class="mode-check">✓</span></button>
+                <button type="button" class="mode-opt" data-mode="chat"><span>○</span> Chat<span class="mode-check">✓</span></button>
+              </div>
+            </div>
+            <span class="auto-badge" title="Auto 编排层">Auto</span>
+            <button type="button" class="btn-icon btn-lock-inline" id="btn-lock" title="Ask/Plan 只读">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </button>
+            <span class="toolbar-spacer"></span>
+            <input type="file" id="file-upload" accept=".txt,.md,.json,.py,.ts,.tsx,.js,.jsx,.html,.css,.vue,.csv,.yaml,.yml,.sql,.rs,.go,.java,.c,.cpp,.h,.xml,.ini,.toml,.log,.sh,.env" hidden multiple />
+            <input type="file" id="folder-upload" webkitdirectory directory multiple hidden />
+            <div class="attach-menu-wrap">
+              <button class="btn-icon" id="btn-upload" title="附加文件/文件夹">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <div class="attach-menu" id="attach-menu">
+                <button type="button" data-act="file">📄 选择文件</button>
+                <button type="button" data-act="folder">📁 选择文件夹</button>
+                <button type="button" data-act="path">📍 附加路径…</button>
+              </div>
+            </div>
+            <button class="stop-btn" id="btn-stop" title="停止">■</button>
+            <button class="send" id="btn-send" title="发送">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="composer-footer" aria-hidden="true">
+          <span class="composer-footer-left" id="mode-hint"></span>
+          <span class="composer-footer-left" id="run-status" style="display:none"></span>
+          <span class="composer-footer-left" id="mode-active-hint"></span>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <aside class="sidebar cursor-history" id="sidebar">
+    <div class="hist-top">
+      <div class="hist-search-wrap">
+        <svg class="hist-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
+        <input type="search" class="hist-search" id="hist-search" placeholder="Search Agents…" autocomplete="off" />
+      </div>
+      <button type="button" class="hist-new-btn" id="btn-new" title="新对话">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        New Agent
+      </button>
+    </div>
+    <div class="sessions" id="sessions"></div>
+    <div class="hist-foot">
+      <button type="button" class="hist-foot-btn" id="btn-settings">⚙ 模型设置</button>
+      <button type="button" class="hist-foot-btn" onclick="location.href='/studio'">训练台</button>
+    </div>
+  </aside>
+
+  <!-- Cursor cookbook agent-kanban style: parallel agents drawer -->
+  <div class="agents-drawer" id="agents-drawer">
+    <div class="agents-drawer-head">
+      <h3>Agents</h3>
+      <button type="button" class="agents-drawer-close" id="agents-drawer-close" title="关闭">×</button>
+    </div>
+    <div class="agents-tabs" id="agents-tabs"></div>
+    <div class="agents-body" id="agents-body"></div>
+  </div>
+
+  <div class="review-drawer" id="review-drawer">
+    <div class="review-drawer-panel review-split">
+      <div class="review-drawer-head">
+        <h3>Review changes</h3>
+        <button type="button" class="review-drawer-close" id="review-drawer-close">×</button>
+      </div>
+      <div class="review-drawer-split">
+        <div class="review-drawer-list" id="review-file-list"></div>
+        <div class="diff-editor-wrap" id="diff-editor-wrap">
+          <div class="diff-editor-head">
+            <span id="diff-editor-path">—</span>
+            <button type="button" class="diff-editor-close" id="diff-editor-close" title="隐藏 diff">×</button>
+          </div>
+          <div class="diff-editor-container" id="diff-editor-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="terminal-panel" id="terminal-panel">
+    <div class="terminal-head">
+      <span>Terminal</span>
+      <div class="terminal-actions">
+        <button type="button" id="terminal-clear" title="清空">Clear</button>
+        <button type="button" id="terminal-close" title="关闭">×</button>
+      </div>
+    </div>
+    <div class="terminal-body" id="terminal-body"></div>
+  </div>
+
+  <div class="cmdk-modal" id="cmdk-modal">
+    <div class="cmdk-card">
+      <div class="cmdk-head">
+        <span>Inline Edit</span>
+        <button type="button" id="cmdk-close">×</button>
+      </div>
+      <div class="cmdk-file" id="cmdk-file">—</div>
+      <pre class="cmdk-selection" id="cmdk-selection"></pre>
+      <textarea id="cmdk-input" rows="3" placeholder="描述要如何修改… (Enter 提交, Esc 关闭)"></textarea>
+      <div class="cmdk-actions">
+        <span class="cmdk-hint">Ctrl+K 快捷打开</span>
+        <button type="button" class="review-btn primary" id="cmdk-submit">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="todo-panel" id="todo-panel"></div>
+
+  <div class="modal mcp-modal-wrap" id="mcp-modal">
+    <div class="modal-card mcp-modal-card">
+      <div class="mcp-modal-head">
+        <h3>🔌 MCP 入站服务器</h3>
+        <button type="button" class="review-drawer-close" id="mcp-modal-close">×</button>
+      </div>
+      <div id="mcp-modal-body"></div>
+      <p class="muted" style="font-size:.76rem;margin-top:.75rem">配置：<code>config/mcp-inbound.json</code> · 可合并 Cursor <code>~/.cursor/mcp.json</code></p>
+    </div>
+  </div>
+
+  <div class="modal delete-modal" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal-card delete-modal-card">
+      <h3 id="delete-modal-title">删除对话？</h3>
+      <p>此操作无法撤销。<span class="delete-target" id="delete-modal-target"></span></p>
+      <div class="delete-modal-actions">
+        <button type="button" class="delete-modal-cancel" id="delete-modal-cancel">取消</button>
+        <button type="button" class="delete-modal-confirm" id="delete-modal-confirm">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="modal">
+    <div class="modal-card">
+      <h3>⚙ 模型设置</h3>
+      <p id="modal-desc">本地 Ollama 完全免费。需安装 Ollama 并拉取模型。</p>
+      <label>快速切换</label>
+      <select id="cfg-preset"><option value="">— 选择预设 —</option></select>
+      <label>运行模式</label>
+      <select id="cfg-provider">
+        <option value="ollama">本地 Ollama（推荐）</option>
+        <option value="openai_compatible">云端 API</option>
+      </select>
+      <div id="cloud-fields" style="display:none">
+        <label>API Key</label>
+        <input type="password" id="cfg-key" placeholder="sk-..." />
+        <label>API 地址</label>
+        <input type="text" id="cfg-base" placeholder="https://api.deepseek.com" />
+      </div>
+      <label>模型名称</label>
+      <input type="text" id="cfg-model" placeholder="llama3:8b" />
+      <p id="cfg-index-status" style="font-size:.76rem;color:var(--muted);margin:.5rem 0 0"></p>
+      <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap">
+        <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" type="button" id="btn-rebuild-index">重建索引</button>
+          <button class="btn btn-ghost" type="button" id="btn-sync-knowledge">同步知识库</button>
+        </div>
+        <div style="display:flex;gap:.4rem">
+        <button class="btn btn-ghost" id="btn-modal-close">取消</button>
+        <button class="btn btn-primary" id="btn-save-config">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal delete-modal" id="path-modal" role="dialog" aria-modal="true">
+    <div class="modal-card delete-modal-card" style="width:min(420px,92vw)">
+      <h3>附加路径</h3>
+      <p style="margin-bottom:.65rem">输入文件或文件夹绝对路径</p>
+      <input type="text" id="path-modal-input" placeholder="D:\CloudMusic\windows212" style="width:100%;box-sizing:border-box;background:#3c3c3c;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:.55rem .7rem;color:#f0f0f0;font:inherit;font-size:.84rem;margin-bottom:.85rem" />
+      <div class="delete-modal-actions">
+        <button type="button" class="delete-modal-cancel" id="path-modal-cancel">取消</button>
+        <button type="button" class="delete-modal-confirm" id="path-modal-ok" style="background:#3794ff">附加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = s => document.querySelector(s);
+    const $$ = s => document.querySelectorAll(s);
+    let sessionId = null, sending = false, sendWatchdog = null, stickToBottom = true;
+    let abortCtrl = null;
+    let chatMode = localStorage.getItem('juno-mode') || 'agent';
+    let agentMode = chatMode !== 'chat';
+    let askMode = chatMode === 'ask';
+    let planMode = chatMode === 'plan';
+    let pendingAttachments = [];
+
+    const MODE_META = {
+      agent: { icon: '∞', label: 'Agent', hint: '∞ Agent · Auto · read/grep/glob/str_replace' },
+      plan:  { icon: '◈', label: 'Plan', hint: '◈ Plan · 只规划 · 不执行写操作' },
+      ask:   { icon: '👁', label: 'Ask', hint: '👁 Ask · 只读 · search/read/grep' },
+      chat:  { icon: '○', label: 'Chat', hint: '○ Chat · 纯对话 · 无工具' },
+    };
+
+    function applyChatMode(mode, opts = {}) {
+      chatMode = mode;
+      agentMode = mode !== 'chat';
+      askMode = mode === 'ask';
+      planMode = mode === 'plan';
+      localStorage.setItem('juno-mode', mode);
+      localStorage.setItem('juno-agent', agentMode ? '1' : '0');
+      localStorage.setItem('juno-ask', askMode ? '1' : '0');
+      syncModeUI();
+      if (!opts.silent) {
+        const meta = MODE_META[mode] || MODE_META.agent;
+        toast('已切换 ' + meta.label + ' 模式');
+      }
+    }
+
+    function syncModeUI() {
+      const meta = MODE_META[chatMode] || MODE_META.agent;
+      const iconEl = $('#mode-icon'), labelEl = $('#mode-label'), hintEl = $('#mode-hint');
+      if (iconEl) iconEl.textContent = meta.icon;
+      if (labelEl) labelEl.textContent = meta.label;
+      if (hintEl) hintEl.textContent = meta.hint;
+      document.querySelectorAll('.mode-opt').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mode === chatMode);
+      });
+      syncCapPills();
+      const activeHint = $('#mode-active-hint');
+      if (activeHint) activeHint.textContent = '';
+    }
+
+    class AgentRail {
+      constructor(msgBody) {
+        this.toolCount = 0;
+        this.thinkRaw = '';
+        this.thinkOpen = true;
+        this.stack = document.createElement('div');
+        this.stack.className = 'tool-stack';
+        this.statusEl = document.createElement('div');
+        this.statusEl.className = 'cursor-status';
+        this.statusEl.innerHTML = '<span class="cursor-status-dot"></span><span class="cursor-status-text">Planning next moves</span><span class="think-chevron">▾</span>';
+        this.statusEl.addEventListener('click', () => {
+          if (this.stack.classList.contains('finished') && !this.thinkRaw.trim()) return;
+          this.thinkOpen = !this.thinkOpen;
+          this._syncThinkOpen();
+        });
+        this.stack.appendChild(this.statusEl);
+        this.thinkEl = document.createElement('div');
+        this.thinkEl.className = 'think-stream open';
+        this.stack.appendChild(this.thinkEl);
+        this.exploredEl = document.createElement('div');
+        this.exploredEl.className = 'explored-line';
+        this.exploredEl.style.display = 'none';
+        this.stack.appendChild(this.exploredEl);
+        this.finishedEl = document.createElement('div');
+        this.finishedEl.className = 'finished-line';
+        this.finishedEl.style.display = 'none';
+        const bubble = msgBody.querySelector('.bubble');
+        msgBody.insertBefore(this.finishedEl, bubble);
+        msgBody.insertBefore(this.stack, bubble);
+        this.stepIdx = 0;
+        this.statusText = this.statusEl.querySelector('.cursor-status-text');
+        this.chevronEl = this.statusEl.querySelector('.think-chevron');
+        this.lastLabel = '';
+      }
+      _syncThinkOpen() {
+        if (!this.thinkEl) return;
+        const has = !!this.thinkRaw.trim();
+        this.thinkEl.classList.toggle('open', this.thinkOpen && has);
+        if (this.chevronEl) {
+          this.chevronEl.style.visibility = has ? 'visible' : 'hidden';
+          this.chevronEl.textContent = this.thinkOpen ? '▾' : '▸';
+        }
+      }
+      _renderThink() {
+        const text = toLiveText(this.thinkRaw);
+        if (!this.thinkEl) return;
+        if (!text.trim()) {
+          this.thinkEl.textContent = '';
+          this._syncThinkOpen();
+          return;
+        }
+        this.thinkEl.textContent = text;
+        this.thinkEl.scrollTop = this.thinkEl.scrollHeight;
+        this._syncThinkOpen();
+      }
+      _toolIcon(label) {
+        const l = (label || '').toLowerCase();
+        if (/read|grep|glob|list|explor/.test(l)) return '◆';
+        if (/search|index/.test(l)) return '⌕';
+        if (/git|shell|run|python/.test(l)) return '▸';
+        if (/wrote|edit|patch|str/.test(l)) return '✎';
+        return '◆';
+      }
+      _toolTag(label) {
+        const l = (label || '').toLowerCase();
+        if (/read/.test(l)) return 'read';
+        if (/grep/.test(l)) return 'grep';
+        if (/glob|explor/.test(l)) return 'glob';
+        if (/search|index/.test(l)) return 'search';
+        if (/git/.test(l)) return 'git';
+        if (/python|shell|run/.test(l)) return 'py';
+        return 'tool';
+      }
+      _updateExplored() {
+        if (this.toolCount > 0) {
+          this.exploredEl.style.display = 'block';
+          this.exploredEl.textContent = `Explored ${this.toolCount} step${this.toolCount > 1 ? 's' : ''}`;
+        }
+      }
+      push(event) {
+        const state = event.state || 'done';
+        if (event.type === 'thinking_delta' && event.text) {
+          this.thinkRaw += event.text;
+          if (this.statusText && !this.stack.classList.contains('finished')) {
+            this.statusText.textContent = 'Planning next moves';
+          }
+          this._renderThink();
+          scrollMessages();
+          return;
+        }
+        if (event.type === 'subagent') {
+          this.finishedEl.style.display = 'flex';
+          this.finishedEl.innerHTML = `<span class="fin-check">✓</span><span>${esc(event.label || 'Finished subagent')}</span>`;
+          window.JunoCursorUI?.onSubagent(event);
+          scrollMessages();
+          return;
+        }
+        if (event.type === 'plan') {
+          this.statusText.textContent = event.label || 'Planning next moves';
+          if (state === 'done') this.statusText.textContent = 'Generating answer';
+          this.lastLabel = event.label || this.lastLabel;
+          scrollMessages();
+          return;
+        }
+        if (event.type === 'tool' || event.type === 'prefetch') {
+          this.toolCount++;
+          this._updateExplored();
+        }
+        const id = event.id || `${event.type}-${++this.stepIdx}`;
+        let el = this.stack.querySelector(`[data-tool-id="${CSS.escape(id)}"]`);
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'cursor-tool';
+          el.dataset.toolId = id;
+          el.innerHTML = `<span class="cursor-tool-icon"></span><span class="cursor-tool-label"></span><span class="cursor-tool-tag"></span>`;
+          this.stack.appendChild(el);
+        }
+        el.className = 'cursor-tool ' + state;
+        const label = event.label || event.name || event.type || '…';
+        this.lastLabel = label;
+        el.querySelector('.cursor-tool-icon').textContent = state === 'error' ? '✗' : state === 'active' ? '◐' : this._toolIcon(label);
+        el.querySelector('.cursor-tool-label').textContent = label;
+        const tag = this._toolTag(label);
+        const tagEl = el.querySelector('.cursor-tool-tag');
+        tagEl.textContent = tag;
+        if (event.phase === 'done' && window.JunoCursorUI) {
+          window.JunoCursorUI.enhanceToolEl(el, event);
+          if (event.name === 'run_shell' || event.result?.command) {
+            window.JunoCursorUI.terminal?.pushFromTool(event);
+          }
+        }
+        scrollMessages();
+      }
+      finish() {
+        this.stack.classList.add('finished');
+        if (this.thinkRaw.trim()) {
+          this.statusText.textContent = 'Thought';
+          this.thinkOpen = false;
+          this.thinkEl.classList.add('done');
+          this._syncThinkOpen();
+        } else {
+          this.statusEl.style.display = 'none';
+        }
+        const short = (this.lastLabel || 'task').slice(0, 48);
+        this.finishedEl.style.display = 'flex';
+        this.finishedEl.innerHTML = `<span class="fin-check">✓</span><span>Finished ${esc(short)}${this.lastLabel && this.lastLabel.length > 48 ? '…' : ''}</span>`;
+      }
+    }
+
+    let pendingOptimisticPaths = [];
+
+    function renderComposerPills() {
+      const el = $('#composer-pills');
+      if (!el) return;
+      el.innerHTML = '';
+      const ctx = window.__junoContextPaths?.() || [];
+      const shown = new Set();
+      pendingOptimisticPaths.forEach(pathText => {
+        if (shown.has(pathText)) return;
+        if (ctx.some(p => p.path === pathText)) return;
+        if (pendingAttachments.some(a => a.source_path === pathText)) return;
+        shown.add(pathText);
+        const pill = document.createElement('span');
+        pill.className = 'composer-pill';
+        pill.title = pathText;
+        pill.innerHTML = `<span class="pill-icon">📁</span><span class="pill-text">${esc(pathText)}</span>`;
+        el.appendChild(pill);
+      });
+      ctx.forEach((p, i) => {
+        const pathText = p.path || p.label || '';
+        if (shown.has(pathText)) return;
+        shown.add(pathText);
+        const pill = document.createElement('span');
+        pill.className = 'composer-pill';
+        pill.title = pathText;
+        pill.innerHTML = `<span class="pill-icon">${p.kind === 'folder' ? '📁' : '📄'}</span><span class="pill-text">${esc(pathText)}</span><button type="button" title="移除">×</button>`;
+        pill.querySelector('button').onclick = () => window.__junoRemoveContextPath?.(i);
+        el.appendChild(pill);
+      });
+      pendingAttachments.forEach((a, i) => {
+        const pill = document.createElement('span');
+        pill.className = 'composer-pill';
+        const pathText = a.source_path || a.name || '';
+        pill.title = pathText;
+        pill.innerHTML = `<span class="pill-icon">${a.kind === 'folder' ? '📁' : '📄'}</span><span class="pill-text">${esc(pathText)}</span><button type="button" title="预览">👁</button><button type="button" title="移除">×</button>`;
+        pill.querySelector('button[title="预览"]')?.addEventListener('click', () => showAttachPreview(a));
+        pill.querySelector('button[title="移除"]')?.addEventListener('click', () => {
+          pendingAttachments.splice(i, 1);
+          renderComposerPills();
+        });
+        el.appendChild(pill);
+      });
+      const legacyBar = $('#attach-bar');
+      if (legacyBar) legacyBar.innerHTML = '';
+      const ctxBar = $('#context-chips');
+      if (ctxBar) ctxBar.innerHTML = '';
+    }
+    window.__junoRenderComposerPills = renderComposerPills;
+
+    function renderAttachBar() { renderComposerPills(); }
+
+    async function showAttachPreview(att) {
+      const panel = $('#attach-preview');
+      const title = $('#attach-preview-title');
+      const body = $('#attach-preview-body');
+      if (!panel || !body) return;
+      title.textContent = att.name || '—';
+      body.textContent = '加载中…';
+      panel.classList.add('open');
+      if (att.preview) {
+        body.textContent = att.preview;
+        return;
+      }
+      try {
+        const r = await api('/api/chat/attachment?session_id=' + encodeURIComponent(sessionId || '') + '&id=' + encodeURIComponent(att.id || ''));
+        body.textContent = r.content || r.error || '无法预览';
+      } catch (e) {
+        body.textContent = e.message;
+      }
+    }
+
+    $('#attach-preview-close')?.addEventListener('click', () => $('#attach-preview')?.classList.remove('open'));
+
+    async function ensureSession() {
+      if (sessionId) return sessionId;
+      const s = await api('/api/chat/new', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+      sessionId = s.id;
+      return sessionId;
+    }
+
+    async function uploadFolderFiles(files, folderName, pathHint) {
+      await ensureSession();
+      // 有完整路径时走服务端 attach（与 Cursor 一致，支持 mp3/二进制目录）
+      if (pathHint) {
+        await attachWorkspacePath(pathHint);
+        return;
+      }
+      const parts = [`# 文件夹 · ${folderName}`, '', '## 拖入文件'];
+      let n = 0;
+      for (const f of files) {
+        if (n >= 35) break;
+        const name = f.name || 'file';
+        const ext = ('.' + name.split('.').pop()).toLowerCase();
+        const textLike = !ext || ext === '.' || /^(text\/|application\/json)/.test(f.type || '') ||
+          ['.txt','.md','.json','.py','.ts','.tsx','.js','.jsx','.html','.css','.vue','.yaml','.yml','.sql','.log','.csv','.ini','.cfg','.sh','.env'].includes(ext);
+        if (!textLike && f.size > 500000) continue;
+        try {
+          const text = await f.text();
+          const rel = f.webkitRelativePath || name;
+          parts.push(`\n### \`${rel}\`\n\`\`\`\n${text.slice(0, 4500)}\n\`\`\``);
+          n++;
+        } catch (_) {}
+      }
+      if (!n) {
+        if (pathHint) { await attachWorkspacePath(pathHint); return; }
+        toast('无法读取文件夹内容，请粘贴完整路径 @D:\\路径 或使用 📎 → 输入路径');
+        const inp = $('#path-modal-input');
+        if (inp) { inp.value = ''; inp.placeholder = 'D:\\CloudMusic\\' + folderName; }
+        $('#path-modal')?.classList.add('show');
+        return;
+      }
+      const bundle = parts.join('\n');
+      const r = await api('/api/chat/upload', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId, filename: folderName + '-folder.md', content: bundle }),
+      });
+      if (r.error) throw new Error(r.error);
+      pendingAttachments.push({ ...r.attachment, preview: bundle.slice(0, 1200), kind: 'folder', source_path: folderName });
+      renderComposerPills();
+      toast(`已附加文件夹 ${folderName}（${n} 个文件）· 👁 预览`);
+    }
+
+    async function uploadFiles(fileList) {
+      if (!fileList?.length) return;
+      await ensureSession();
+      let ok = 0;
+      for (const f of fileList) {
+        try {
+          const text = await f.text();
+          const r = await api('/api/chat/upload', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ session_id: sessionId, filename: f.name, content: text }),
+          });
+          if (r.error) throw new Error(r.error);
+          pendingAttachments.push({ ...r.attachment, preview: r.preview, source_path: f.name });
+          ok++;
+        } catch (e) {
+          toast('上传失败 · ' + f.name + '：' + e.message);
+        }
+      }
+      renderAttachBar();
+      if (ok) toast(`已附加 ${ok} 个文件 · 点击 👁 预览`);
+    }
+
+    function snapshotDataTransfer(dt) {
+      const snap = { types: [...(dt?.types || [])] };
+      if (!dt) return snap;
+      for (const t of snap.types) {
+        try { snap[t] = dt.getData(t); } catch (_) { snap[t] = ''; }
+      }
+      try { snap['Text'] = snap['Text'] || dt.getData('Text'); } catch (_) {}
+      return snap;
+    }
+
+    function fileUriToWinPath(uri) {
+      if (!uri || typeof uri !== 'string') return null;
+      const line = uri.trim().split(/\r?\n/).find(l => l && !l.startsWith('#')) || uri.trim();
+      if (!/^file:/i.test(line)) return null;
+      try {
+        const u = new URL(line);
+        let p = decodeURIComponent(u.pathname || '');
+        if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1);
+        else if (/^\/[A-Za-z]\//.test(p)) p = p.slice(1);
+        p = p.replace(/\//g, '\\');
+        return /^[A-Za-z]:\\/.test(p) ? p.replace(/\\+$/, '') : null;
+      } catch (_) {
+        let p = line.replace(/^file:\/\/\/?/i, '').replace(/\//g, '\\');
+        if (/^[A-Za-z]:\\/.test(p)) return p.replace(/\\+$/, '');
+        return null;
+      }
+    }
+
+    function parseWinPathLine(raw) {
+      if (!raw || typeof raw !== 'string') return null;
+      const line = raw.trim().split(/\r?\n/).map(l => l.trim()).find(Boolean);
+      if (!line) return null;
+      const cleaned = line.replace(/^@+/, '');
+      if (/^file:/i.test(cleaned)) return fileUriToWinPath(cleaned);
+      if (/^[A-Za-z]:[\\\/]/.test(cleaned)) return cleaned.replace(/\//g, '\\').replace(/\\+$/, '');
+      return null;
+    }
+
+    function extractPathsFromSnapshot(snap) {
+      if (!snap) return null;
+      const prefer = ['application/juno-path', 'text/juno-path', 'text/uri-list', 'text/plain', 'Text', 'URL'];
+      for (const key of prefer) {
+        const p = parseWinPathLine(snap[key]);
+        if (p) return p;
+      }
+      for (const t of snap.types || []) {
+        if (prefer.includes(t)) continue;
+        const p = parseWinPathLine(snap[t]);
+        if (p) return p;
+      }
+      return null;
+    }
+
+    function extractWindowsPath(dt) {
+      return extractPathsFromSnapshot(snapshotDataTransfer(dt));
+    }
+
+    function extractPathsFromFiles(dt) {
+      if (!dt?.files) return null;
+      for (const f of dt.files) {
+        if (f.path && /^[A-Za-z]:\\/.test(f.path)) return f.path.replace(/\\+$/, '');
+      }
+      return null;
+    }
+
+    async function resolveAndAttachFolder(folderName) {
+      try {
+        const r = await api('/api/chat/resolve-drop', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ folder_name: folderName }),
+        });
+        if (r.path) {
+          await attachWorkspacePath(r.path);
+          return true;
+        }
+        if (r.matches?.length === 1) {
+          await attachWorkspacePath(r.matches[0]);
+          return true;
+        }
+        if (r.matches?.length > 1) {
+          const inp = $('#path-modal-input');
+          if (inp) {
+            inp.value = r.matches[r.matches.length - 1];
+            inp.placeholder = r.matches.join(' 或 ');
+          }
+          $('#path-modal')?.classList.add('show');
+          toast('找到多个同名文件夹，请确认路径');
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+
+    async function attachWorkspacePath(pathStr) {
+      if (!pathStr) return;
+      pathStr = pathStr.replace(/^@+/, '').trim();
+      await ensureSession();
+      if (!pendingOptimisticPaths.includes(pathStr)) pendingOptimisticPaths.push(pathStr);
+      renderComposerPills();
+      try {
+        const r = await api('/api/chat/attach-path', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ session_id: sessionId, path: pathStr }),
+        });
+        if (r.error) throw new Error(r.error);
+        pendingOptimisticPaths = pendingOptimisticPaths.filter(p => p !== pathStr);
+        const att = { ...r.attachment, preview: r.preview, kind: r.attachment?.kind || 'file', source_path: pathStr };
+        pendingAttachments.push(att);
+        renderComposerPills();
+        toast('已附加 · 👁 预览');
+      } catch (e) {
+        pendingOptimisticPaths = pendingOptimisticPaths.filter(p => p !== pathStr);
+        window.__junoAddContextPath?.({ path: pathStr, label: pathStr.split(/[/\\]/).pop() || pathStr, kind: 'folder' });
+        renderComposerPills();
+        toast('已 @ ' + pathStr.split(/[/\\]/).pop());
+      }
+    }
+
+    function tryAttachPathFromText(text) {
+      const m = (text || '').trim().match(/^@?([A-Za-z]:\\.+?)\s*$/);
+      return m ? m[1] : null;
+    }
+
+    window.__junoUploadFiles = uploadFiles;
+    window.__junoUploadFolderFiles = uploadFolderFiles;
+    window.__junoAttachWorkspacePath = attachWorkspacePath;
+
+    $('#file-upload')?.addEventListener('change', e => {
+      uploadFiles(e.target.files);
+      e.target.value = '';
+    });
+    $('#folder-upload')?.addEventListener('change', e => {
+      const files = e.target.files;
+      if (!files?.length) return;
+      const root = files[0]?.webkitRelativePath?.split('/')[0] || 'folder';
+      uploadFolderFiles(files, root);
+      e.target.value = '';
+    });
+
+    function bindAttachMenu() {
+      const wrap = document.querySelector('.attach-menu-wrap');
+      const menu = $('#attach-menu');
+      const btn = $('#btn-upload');
+      if (!btn || btn.dataset.attachBound) return;
+      btn.dataset.attachBound = '1';
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        menu?.classList.toggle('open');
+      });
+      menu?.querySelectorAll('[data-act]').forEach(b => {
+        b.addEventListener('click', e => {
+          e.stopPropagation();
+          menu?.classList.remove('open');
+          const act = b.dataset.act;
+          if (act === 'file') { $('#file-upload')?.click(); return; }
+          if (act === 'folder') { $('#folder-upload')?.click(); return; }
+          if (act === 'path') {
+            const m = $('#path-modal'), inp = $('#path-modal-input');
+            if (inp) inp.value = '';
+            m?.classList.add('show');
+            setTimeout(() => inp?.focus(), 50);
+          }
+        });
+      });
+      document.addEventListener('click', e => {
+        if (wrap && !wrap.contains(e.target)) menu?.classList.remove('open');
+      });
+      $('#path-modal-cancel')?.addEventListener('click', () => $('#path-modal')?.classList.remove('show'));
+      $('#path-modal-ok')?.addEventListener('click', async () => {
+        const p = $('#path-modal-input')?.value?.trim();
+        $('#path-modal')?.classList.remove('show');
+        if (p) await attachWorkspacePath(p);
+      });
+      $('#path-modal-input')?.addEventListener('keydown', async e => {
+        if (e.key === 'Enter') { e.preventDefault(); $('#path-modal-ok')?.click(); }
+        if (e.key === 'Escape') $('#path-modal')?.classList.remove('show');
+      });
+    }
+
+    /** Composer 拖放 — capture 阶段拦截，避免 textarea 吞掉 drop */
+    function initComposerDrop() {
+      if (window.__junoDropInited) return;
+      window.__junoDropInited = true;
+      const box = document.querySelector('.composer-box');
+      const composer = document.querySelector('.composer');
+      const input = document.getElementById('input');
+      const overlay = document.getElementById('drop-overlay');
+      let dragN = 0;
+
+      function isFileDrag(e) {
+        const types = e.dataTransfer?.types ? [...e.dataTransfer.types] : [];
+        if (types.includes('Files')) return true;
+        if (types.includes('application/juno-path') || types.includes('text/juno-path')) return true;
+        return false;
+      }
+
+      function isInComposer(target) {
+        if (!target) return false;
+        return !!(composer?.contains(target) || box?.contains(target) || target === input || target === overlay);
+      }
+
+      function showDropUI() {
+        box?.classList.add('drag-over');
+      }
+      function hideDropUI() {
+        dragN = 0;
+        overlay?.classList.remove('show');
+        box?.classList.remove('drag-over');
+      }
+
+      function entryFile(entry) {
+        return new Promise((res, rej) => entry.file(res, rej));
+      }
+
+      async function walkDir(entry, prefix, out, depth) {
+        if (depth > 8 || out.length > 100) return;
+        const reader = entry.createReader();
+        const read = () => new Promise((res, rej) => reader.readEntries(res, rej));
+        let batch = await read();
+        while (batch.length) {
+          for (const ent of batch) {
+            if (out.length > 100) return;
+            if (ent.isFile) {
+              const f = await entryFile(ent);
+              const rel = prefix ? prefix + '/' + ent.name : ent.name;
+              try { Object.defineProperty(f, 'webkitRelativePath', { value: rel, configurable: true }); } catch (_) {}
+              out.push(f);
+            } else if (ent.isDirectory) {
+              await walkDir(ent, prefix ? prefix + '/' + ent.name : ent.name, out, depth + 1);
+            }
+          }
+          batch = await read();
+        }
+      }
+
+      async function processDrop(e, snap) {
+        const dt = e.dataTransfer;
+        if (!dt) return;
+        snap = snap || snapshotDataTransfer(dt);
+
+        const junoPath = snap['application/juno-path'] || snap['text/juno-path'];
+        let winPath = extractPathsFromSnapshot(snap) || extractPathsFromFiles(dt);
+        if (junoPath) { await attachWorkspacePath(junoPath); return; }
+        if (winPath) { await attachWorkspacePath(winPath); return; }
+
+        // 检测是否为「整文件夹」拖入 — 优先服务端路径附加，不走浏览器读 mp3
+        let dirEntry = null;
+        for (const item of [...(dt.items || [])]) {
+          if (item.kind !== 'file') continue;
+          const ent = item.webkitGetAsEntry?.();
+          if (ent?.isDirectory) { dirEntry = ent; break; }
+        }
+        if (dirEntry) {
+          if (await resolveAndAttachFolder(dirEntry.name)) return;
+          toast('请粘贴完整路径 @D:\\路径');
+          const inp = $('#path-modal-input');
+          if (inp) { inp.value = ''; inp.placeholder = 'D:\\CloudMusic\\' + dirEntry.name; }
+          $('#path-modal')?.classList.add('show');
+          return;
+        }
+
+        const files = [];
+        let root = '';
+        for (const item of [...(dt.items || [])]) {
+          if (item.kind !== 'file') continue;
+          const ent = item.webkitGetAsEntry?.();
+          if (!ent) continue;
+          if (ent.isDirectory) {
+            root = ent.name;
+            await walkDir(ent, ent.name, files, 0);
+          } else if (ent.isFile) {
+            files.push(await entryFile(ent));
+          }
+        }
+        if (!files.length && dt.files?.length) {
+          for (const f of dt.files) files.push(f);
+        }
+        if (!root && files[0]?.webkitRelativePath?.includes('/')) {
+          root = files[0].webkitRelativePath.split('/')[0];
+        }
+        if (!files.length) {
+          toast('未检测到文件，请拖入文件或文件夹');
+          return;
+        }
+        if (root && (files.length > 1 || files[0]?.webkitRelativePath?.includes('/'))) {
+          await uploadFolderFiles(files, root, winPath);
+        } else {
+          await uploadFiles(files);
+        }
+      }
+
+      let dropBusy = false;
+      async function onDrop(e) {
+        if (!isFileDrag(e)) return;
+        if (!isInComposer(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        hideDropUI();
+        if (dropBusy) return;
+        dropBusy = true;
+        const snap = snapshotDataTransfer(e.dataTransfer);
+        try { await processDrop(e, snap); } catch (err) { toast('拖放失败：' + err.message); }
+        finally { dropBusy = false; }
+      }
+
+      function onDragOver(e) {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        if (isInComposer(e.target)) showDropUI();
+        else hideDropUI();
+      }
+
+      function onDragEnter(e) {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        if (isInComposer(e.target)) { dragN++; showDropUI(); }
+      }
+
+      function onDragLeave(e) {
+        if (!isFileDrag(e)) return;
+        if (!isInComposer(e.relatedTarget)) {
+          dragN = Math.max(0, dragN - 1);
+          if (dragN === 0) hideDropUI();
+        }
+      }
+
+      // capture 阶段拦截，避免 textarea 吞 drop；仅注册 document 避免重复触发
+      document.addEventListener('dragenter', onDragEnter, true);
+      document.addEventListener('dragleave', onDragLeave, true);
+      document.addEventListener('dragover', onDragOver, true);
+      document.addEventListener('drop', onDrop, true);
+
+      input?.addEventListener('paste', async e => {
+        const text = e.clipboardData?.getData('text/plain')?.trim();
+        if (text && /^@?[A-Za-z]:\\/.test(text)) {
+          e.preventDefault();
+          input.value = input.value.replace(text, '').trim();
+          await attachWorkspacePath(text.replace(/^@+/, ''));
+        }
+      });
+    }
+
+    function timeGreeting() {
+      const h = new Date().getHours();
+      if (h < 6) return '夜深了';
+      if (h < 11) return '早上好';
+      if (h < 14) return '中午好';
+      if (h < 18) return '下午好';
+      if (h < 23) return '晚上好';
+      return '夜深了';
+    }
+
+    function buildWelcomeHtml() {
+      const g = timeGreeting();
+      return `<div class="welcome" id="welcome">
+      <h3>${g}，俊呈</h3>
+      <p>我是 Juno。Agent 可读改代码，Plan 只规划，Ask 只读，Chat 纯对话。底部 ∞ 切换模式。</p></div>`;
+    }
+
+    function setJunoState(state) {
+      const rs = $('#run-status');
+      if (rs) rs.style.display = (state === 'thinking' || state === 'streaming') ? 'inline' : 'none';
+    }
+
+    function junoAvatarHTML() { return ''; }
+
+    function releaseSendLock() {
+      if (sendWatchdog) { clearTimeout(sendWatchdog); sendWatchdog = null; }
+      sending = false;
+      abortCtrl = null;
+      setJunoState(null);
+      const btn = $('#btn-send'), input = $('#input'), stop = $('#btn-stop');
+      if (btn) btn.disabled = false;
+      if (stop) stop.classList.remove('show');
+      if (input) { input.disabled = false; input.focus(); }
+    }
+
+    function acquireSendLock() {
+      sending = true;
+      abortCtrl = new AbortController();
+      setJunoState('thinking');
+      $('#btn-send').disabled = true;
+      $('#btn-stop')?.classList.add('show');
+      if (sendWatchdog) clearTimeout(sendWatchdog);
+      sendWatchdog = setTimeout(() => {
+        if (sending) { releaseSendLock(); toast('请求超时，已解锁'); }
+      }, 180000);
+    }
+
+    function toast(msg) {
+      window.__junoToast = toast;
+      const t = $('#toast');
+      t.textContent = msg; t.style.display = 'block';
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => t.style.display = 'none', 2600);
+    }
+
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      return data;
+    }
+
+    function syncCapPills() {
+      document.querySelectorAll('#cap-pills .cap-pill').forEach(p => {
+        const cap = p.dataset.cap;
+        p.classList.remove('on', 'dim');
+        if (askMode) {
+          p.classList.toggle('on', cap !== '写');
+          if (cap === '写') p.classList.add('dim');
+        } else if (planMode) {
+          p.classList.toggle('on', cap !== '写');
+          if (cap === '写') p.classList.add('dim');
+        } else if (agentMode) {
+          p.classList.add('on');
+        } else if (cap === '写') {
+          p.classList.add('dim');
+        } else {
+          p.classList.add('on');
+        }
+      });
+    }
+
+    applyChatMode(chatMode, { silent: true });
+
+    document.querySelectorAll('.mode-opt').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        applyChatMode(btn.dataset.mode);
+        $('#mode-menu')?.classList.remove('open');
+      });
+    });
+    $('#mode-menu')?.addEventListener('click', e => e.stopPropagation());
+
+    async function refreshStatus() {
+      try {
+      const s = await api('/api/chat/status');
+      const dot = $('#status-dot'), text = $('#status-text'), badge = $('#model-badge');
+      if (s.configured) {
+        dot.className = 'status-dot ok';
+        const syncHint = s.last_juno_sync ? ' · 已同步' : '';
+        const idx = s.index?.chunks ? ` · 索引 ${s.index.chunks} 块` : '';
+        const hybrid = s.index?.hybrid ? ' · 向量' : '';
+        const modeHint = s.prompt_mode === 'compact' ? ' · 精简脑' : '';
+        text.textContent = (s.mode_label || '本地独立') + syncHint + idx + hybrid + modeHint;
+        badge.textContent = s.model || '—';
+        const ix = $('#cfg-index-status');
+        if (ix && s.index) ix.textContent = `索引：${s.index.chunks || 0} 块 · ${s.index.hybrid ? 'TF-IDF+向量' : 'TF-IDF'} · ${s.index.built || '未构建'}`;
+        syncCapPills();
+        if (s.skills?.length) {
+          const box = $('#skill-pills');
+          if (box) {
+            box.innerHTML = s.skills.map(sk =>
+              `<span class="skill-pill ${sk.loaded ? 'loaded' : ''}" title="${sk.id}">${sk.role}</span>`
+            ).join('');
+          }
+        }
+        const inj = $('#inject-pills');
+        if (inj && s.inject_layers?.length) {
+          inj.innerHTML = s.inject_layers.filter(x => x.active).slice(0, 12).map(x =>
+            `<span class="inject-pill" title="${esc(x.id)}">${esc(x.label)}</span>`
+          ).join('');
+        }
+      } else {
+        dot.className = 'status-dot no';
+        text.textContent = s.hint || '未就绪';
+        badge.textContent = '未连接';
+      }
+      $('#cfg-provider').value = s.provider === 'openai_compatible' ? 'openai_compatible' : 'ollama';
+      toggleCloudFields();
+      if (s.model) $('#cfg-model').placeholder = s.model;
+      } catch (e) {
+        $('#status-dot').className = 'status-dot no';
+        $('#status-text').textContent = '服务未连接';
+        $('#model-badge').textContent = '—';
+      }
+    }
+
+    function toggleCloudFields() {
+      const cloud = $('#cfg-provider').value === 'openai_compatible';
+      $('#cloud-fields').style.display = cloud ? 'block' : 'none';
+    }
+
+    async function loadPresets() {
+      const r = await api('/api/chat/presets');
+      const sel = $('#cfg-preset');
+      sel.innerHTML = '<option value="">— 选择预设 —</option>';
+      (r.items || []).forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.id; o.textContent = p.label || p.id;
+        sel.appendChild(o);
+      });
+    }
+
+    $('#cfg-preset').onchange = async () => {
+      const preset = $('#cfg-preset').value;
+      if (!preset) return;
+      await api('/api/chat/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ preset }) });
+      toast('已切换：' + $('#cfg-preset').selectedOptions[0].textContent);
+      refreshStatus();
+    };
+
+    function confirmDeleteSession(title) {
+      return new Promise(resolve => {
+        const modal = $('#delete-modal');
+        const target = $('#delete-modal-target');
+        if (!modal) { resolve(false); return; }
+        if (target) target.textContent = title ? `「${title}」` : '此对话';
+        modal.classList.add('show');
+        const done = ok => {
+          modal.classList.remove('show');
+          $('#delete-modal-cancel')?.removeEventListener('click', onCancel);
+          $('#delete-modal-confirm')?.removeEventListener('click', onOk);
+          modal.removeEventListener('click', onBackdrop);
+          document.removeEventListener('keydown', onKey);
+          resolve(ok);
+        };
+        const onCancel = () => done(false);
+        const onOk = () => done(true);
+        const onBackdrop = e => { if (e.target === modal) done(false); };
+        const onKey = e => {
+          if (e.key === 'Escape') done(false);
+          if (e.key === 'Enter') done(true);
+        };
+        $('#delete-modal-cancel')?.addEventListener('click', onCancel);
+        $('#delete-modal-confirm')?.addEventListener('click', onOk);
+        modal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKey);
+        setTimeout(() => $('#delete-modal-confirm')?.focus(), 50);
+      });
+    }
+
+    const PINNED_KEY = 'juno-pinned-sessions';
+
+    function getPinnedIds() {
+      try { return JSON.parse(localStorage.getItem(PINNED_KEY) || '[]'); } catch (_) { return []; }
+    }
+
+    function togglePin(id) {
+      const pins = getPinnedIds();
+      const i = pins.indexOf(id);
+      if (i >= 0) pins.splice(i, 1);
+      else pins.unshift(id);
+      localStorage.setItem(PINNED_KEY, JSON.stringify(pins.slice(0, 20)));
+      loadSessions(sessionId);
+    }
+
+    function isDraftSession(item) {
+      const t = (item.title || '').trim();
+      const n = item.message_count || 0;
+      return (t === '新对话' || !t) && n <= 1;
+    }
+
+    function sessionTimeGroup(iso) {
+      if (!iso) return 'today';
+      const d = new Date(iso);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yest = new Date(today); yest.setDate(yest.getDate() - 1);
+      const week = new Date(today); week.setDate(week.getDate() - 7);
+      if (d >= today) return 'today';
+      if (d >= yest) return 'yesterday';
+      if (d >= week) return 'week';
+      return 'older';
+    }
+
+    const GROUP_LABELS = { pinned: 'Pinned', today: 'Today', yesterday: 'Yesterday', week: 'Previous 7 days', older: 'Older' };
+
+    function iconDone() {
+      return '<svg viewBox="0 0 24 24" class="hist-ico-svg"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></svg>';
+    }
+    function iconDraft() {
+      return '<svg viewBox="0 0 24 24" class="hist-ico-svg"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    }
+    function iconPin(filled) {
+      return filled
+        ? '<svg viewBox="0 0 24 24" class="hist-act-svg"><path d="M12 2l1.2 4.2L17 7l-3.8 2.2L12 14l-1.2-4.8L7 7l3.8-.8Z" fill="currentColor"/></svg>'
+        : '<svg viewBox="0 0 24 24" class="hist-act-svg"><path d="M12 2l1.2 4.2L17 7l-3.8 2.2L12 14l-1.2-4.8L7 7l3.8-.8Z"/></svg>';
+    }
+    function iconTrash() {
+      return '<svg viewBox="0 0 24 24" class="hist-act-svg"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>';
+    }
+
+    function renderHistItem(item, activeId, { pinned = false } = {}) {
+      const draft = isDraftSession(item);
+      const title = esc(item.title || '新对话');
+      const div = document.createElement('div');
+      div.className = 'hist-item' + (item.id === activeId ? ' active' : '') + (pinned ? ' pinned' : '');
+      div.dataset.id = item.id;
+      div.innerHTML = `
+        <span class="hist-icon ${draft ? 'hist-icon-draft' : 'hist-icon-done'}">${draft ? iconDraft() : iconDone()}</span>
+        <span class="hist-title">${draft ? '<span class="hist-draft-tag">Draft:</span> ' : ''}${title}</span>
+        <div class="hist-actions">
+          <button type="button" class="hist-act hist-pin" title="${pinned ? '取消置顶' : '置顶'}">${iconPin(pinned)}</button>
+          <button type="button" class="hist-act hist-del" title="删除">${iconTrash()}</button>
+        </div>`;
+      div.querySelector('.hist-title').onclick = () => { closeSidebar(); openSession(item.id); };
+      div.querySelector('.hist-icon').onclick = () => { closeSidebar(); openSession(item.id); };
+      div.querySelector('.hist-pin').onclick = e => { e.stopPropagation(); togglePin(item.id); };
+      div.querySelector('.hist-del').onclick = async e => {
+        e.stopPropagation();
+        if (!await confirmDeleteSession(item.title || '新对话')) return;
+        await deleteSession(item.id);
+      };
+      return div;
+    }
+
+    function renderHistGroup(label, items, activeId, opts) {
+      if (!items.length) return null;
+      const wrap = document.createElement('div');
+      wrap.className = 'hist-group';
+      const head = document.createElement('div');
+      head.className = 'hist-group-label';
+      head.textContent = label;
+      wrap.appendChild(head);
+      items.forEach(item => wrap.appendChild(renderHistItem(item, activeId, opts)));
+      return wrap;
+    }
+
+    async function loadSessions(activeId) {
+      const r = await api('/api/chat/sessions');
+      const box = $('#sessions');
+      const q = ($('#hist-search')?.value || '').trim().toLowerCase();
+      let items = r.items || [];
+      if (q) items = items.filter(it => (it.title || '').toLowerCase().includes(q));
+
+      box.innerHTML = '';
+      const pins = getPinnedIds();
+      const pinnedItems = pins.map(id => items.find(it => it.id === id)).filter(Boolean);
+      const unpinned = items.filter(it => !pins.includes(it.id));
+
+      const buckets = { today: [], yesterday: [], week: [], older: [] };
+      unpinned.forEach(it => buckets[sessionTimeGroup(it.updated)].push(it));
+
+      if (pinnedItems.length) {
+        box.appendChild(renderHistGroup(GROUP_LABELS.pinned, pinnedItems, activeId, { pinned: true }));
+      }
+      ['today', 'yesterday', 'week', 'older'].forEach(key => {
+        const g = renderHistGroup(GROUP_LABELS[key], buckets[key], activeId);
+        if (g) box.appendChild(g);
+      });
+
+      if (!items.length) {
+        box.innerHTML = '<div class="hist-empty">' + (q ? '无匹配会话' : '暂无历史对话') + '</div>';
+      }
+    }
+
+    async function deleteSession(id) {
+      await api('/api/chat/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ session_id: id }) });
+      if (sessionId === id) {
+        sessionId = null;
+        await newChat();
+      } else {
+        loadSessions(sessionId);
+      }
+      toast('已删除对话');
+    }
+
+    function closeSidebar() {
+      $('#sidebar')?.classList.remove('open');
+      $('#app-root')?.classList.remove('sidebar-open');
+      $('#sidebar-overlay')?.classList.remove('show');
+      document.getElementById('btn-rail-history')?.classList.remove('active');
+    }
+
+    function openSidebar() {
+      $('#sidebar')?.classList.add('open');
+      $('#app-root')?.classList.add('sidebar-open');
+      $('#sidebar-overlay')?.classList.add('show');
+      document.getElementById('btn-rail-history')?.classList.add('active');
+      loadSessions(sessionId);
+    }
+
+    function toggleSidebar() {
+      if ($('#app-root')?.classList.contains('sidebar-open')) closeSidebar();
+      else openSidebar();
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function formatInline(s) {
+      return esc(s)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+    }
+
+    function isTableRow(line) {
+      const t = String(line || '').trim();
+      return t.startsWith('|') && t.includes('|');
+    }
+
+    function isTableSep(line) {
+      const t = String(line || '').trim();
+      return /^\|?[\s:\-|]+\|?$/.test(t) && t.includes('-');
+    }
+
+    function parseTableRow(line) {
+      return String(line || '').trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+    }
+
+    /** 把一行里的 md 符号清掉，输出可读纯文本 */
+    function cleanLineText(line, { partial = false } = {}) {
+      let s = String(line || '');
+      if (isTableSep(s)) return null;
+      if (isTableRow(s)) {
+        return parseTableRow(s).filter(Boolean).map(c => c.replace(/\*\*/g, '').replace(/`/g, '')).join(' · ');
+      }
+      s = s.trim();
+      if (!s) return '';
+      s = s.replace(/^[【\[]([^\]】]+)[\]】]\s*/u, '$1：');
+      s = s.replace(/【/g, '').replace(/】/g, '');
+      s = s.replace(/^#{1,6}\s+/, '');
+      s = s.replace(/^[-*+]\s+/, '');
+      s = s.replace(/^\d+\.\s+/, '');
+      s = s.replace(/\*\*(.+?)\*\*/g, '$1');
+      s = s.replace(/`([^`]+)`/g, '$1');
+      s = s.replace(/[*`|#]/g, '');
+      s = s.replace(/\s+/g, ' ').trim();
+      if (partial && !s) return null;
+      return s;
+    }
+
+    /** 流式尾部：藏掉还没打完的 md 符号 */
+    function trimPartialMarkdown(raw) {
+      let s = String(raw || '');
+      if (!s) return '';
+      // 去掉末尾单独出现的 md 控制符
+      s = s.replace(/[*`|#\-]+$/u, '');
+      // 未闭合的 ** 或 `
+      const dbl = (s.match(/\*\*/g) || []).length;
+      if (dbl % 2 === 1) {
+        const i = s.lastIndexOf('**');
+        if (i >= 0) s = s.slice(0, i) + s.slice(i + 2).replace(/\*+$/, '');
+      }
+      const ticks = (s.match(/`/g) || []).length;
+      if (ticks % 2 === 1) s = s.slice(0, s.lastIndexOf('`'));
+      // 表格行打到一半：整行先不显示
+      const lines = s.split('\n');
+      const last = lines[lines.length - 1];
+      if (last && last.trim().startsWith('|') && !last.trim().endsWith('|')) {
+        lines.pop();
+        s = lines.join('\n');
+      }
+      return s;
+    }
+
+    function toLiveText(raw) {
+      const safe = trimPartialMarkdown(raw);
+      const lines = safe.split('\n');
+      const out = [];
+      for (const line of lines) {
+        const pl = cleanLineText(line);
+        if (pl === null) continue;
+        if (pl === '') { if (out.length && out[out.length - 1] !== '') out.push(''); continue; }
+        out.push(pl);
+      }
+      return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+    }
+
+    function toFriendlyBlocks(raw) {
+      const lines = String(raw || '').split('\n');
+      const blocks = [];
+      let para = [];
+      const flushPara = () => {
+        if (para.length) { blocks.push({ type: 'p', lines: para.slice() }); para = []; }
+      };
+      let i = 0;
+      while (i < lines.length) {
+        if (isTableRow(lines[i]) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+          flushPara();
+          const tbl = [];
+          while (i < lines.length && isTableRow(lines[i])) {
+            const pl = cleanLineText(lines[i]);
+            if (pl) tbl.push(pl);
+            i++;
+          }
+          if (tbl.length) blocks.push({ type: 'list', items: tbl });
+          continue;
+        }
+        const pl = cleanLineText(lines[i]);
+        if (pl === null) { i++; continue; }
+        if (!pl) { flushPara(); i++; continue; }
+        para.push(pl);
+        i++;
+      }
+      flushPara();
+      return blocks;
+    }
+
+    function renderFriendlyHtml(raw) {
+      const src = String(raw || '');
+      const parts = [];
+      const codeRe = /```(\w*)\n([\s\S]*?)```/g;
+      let last = 0;
+      let m;
+      while ((m = codeRe.exec(src)) !== null) {
+        if (m.index > last) parts.push({ type: 'text', content: src.slice(last, m.index) });
+        parts.push({ type: 'code', lang: m[1], content: m[2].trim() });
+        last = m.index + m[0].length;
+      }
+      if (last < src.length) parts.push({ type: 'text', content: src.slice(last) });
+      if (!parts.length) parts.push({ type: 'text', content: src });
+      const html = parts.map(p => {
+        if (p.type === 'code') {
+          return `<pre class="hljs-block"><code class="language-${esc(p.lang || 'plaintext')}">${esc(p.content)}</code></pre>`;
+        }
+        const blocks = toFriendlyBlocks(p.content);
+        if (!blocks.length) return '';
+        return blocks.map(b => {
+          if (b.type === 'list') {
+            return '<ul class="friendly-list">' + b.items.map(i => `<li>${formatInline(i)}</li>`).join('') + '</ul>';
+          }
+          return '<p>' + b.lines.map(l => formatInline(l)).join('<br>') + '</p>';
+        }).join('');
+      }).join('');
+      return html || '<p></p>';
+    }
+
+    function renderMarkdown(raw) {
+      return renderFriendlyHtml(raw);
+    }
+
+    /** 实时流式：服务端来多少显示多少，不人为拖慢 */
+    class LiveStream {
+      constructor(bubble, onScroll) {
+        this.bubble = bubble;
+        this.onScroll = onScroll;
+        this.raw = '';
+        this.lineEl = null;
+        this.cursorEl = null;
+        this.raf = null;
+        this.ensureDom();
+      }
+      ensureDom() {
+        if (!this.bubble || this.lineEl) return;
+        this.bubble.innerHTML = '<div class="stream-body"><p class="stream-line"></p><span class="typing-cursor" aria-hidden="true"></span></div>';
+        this.lineEl = this.bubble.querySelector('.stream-line');
+        this.cursorEl = this.bubble.querySelector('.typing-cursor');
+      }
+      push(chunk) {
+        this.raw += chunk;
+        if (!this.raf) this.raf = requestAnimationFrame(() => this.flush());
+      }
+      flush() {
+        this.raf = null;
+        if (!this.lineEl) this.ensureDom();
+        this.bubble.classList.add('streaming-live');
+        this.bubble.classList.remove('rich', 'finalizing');
+        const text = toLiveText(this.raw);
+        if (this.lineEl.textContent !== text) this.lineEl.textContent = text;
+        if (this.cursorEl) this.cursorEl.style.display = 'inline-block';
+        this.onScroll?.();
+      }
+      finish() {
+        if (this.raf) { cancelAnimationFrame(this.raf); this.raf = null; }
+        if (this.cursorEl) this.cursorEl.style.display = 'none';
+      }
+    }
+
+    function setBubbleContent(bubble, role, content) {
+      if (!bubble) return;
+      if (role === 'user') {
+        bubble.classList.remove('rich', 'streaming', 'streaming-live', 'finalizing');
+        bubble.textContent = content || '';
+        return;
+      }
+      bubble.classList.remove('streaming-live', 'streaming');
+      bubble.classList.add('rich');
+      bubble.innerHTML = renderFriendlyHtml(content || '');
+      if (window.JunoCursorUI) {
+        window.JunoCursorUI.highlightCodeBlocks(bubble);
+        window.JunoCursorUI.linkCitations(bubble);
+      }
+    }
+
+    const WELCOME_HTML = buildWelcomeHtml();
+
+    function messageActionsHtml(role) {
+      if (role === 'user') {
+        return `<div class="msg-actions"><button class="msg-act" data-act="copy">复制</button></div>`;
+      }
+      return `<div class="msg-actions">
+        <button class="msg-act" data-act="copy">复制</button>
+        <button class="msg-act" data-act="regen">重答</button>
+      </div>`;
+    }
+
+    function bindMessageActions(div, role, getText) {
+      div.querySelectorAll('.msg-act').forEach(btn => {
+        btn.onclick = async () => {
+          const act = btn.dataset.act;
+          const text = getText();
+          if (act === 'copy') {
+            await navigator.clipboard.writeText(text || '');
+            toast('已复制');
+          } else if (act === 'regen' && role === 'assistant') {
+            await regenerateReply(div);
+          }
+        };
+      });
+    }
+
+    function suggestFollowups(text) {
+      const t = (text || '').trim();
+      if (!t || t.length < 40) return [];
+      if (/计划|待办|学习/.test(t)) return ['能再压缩成 3 条吗？', '哪件最该先做？'];
+      if (/代码|bug|报错|项目/.test(t)) return ['下一步怎么做？', '有没有更简单的方案？'];
+      if (/总结|最近/.test(t)) return ['再具体一点', '和上周比有什么变化？'];
+      return ['继续说', '换个更短的说法'];
+    }
+
+    function renderFollowups(container, items) {
+      if (!container || !items.length) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'followups';
+      items.forEach(q => {
+        const b = document.createElement('button');
+        b.className = 'followup';
+        b.textContent = q;
+        b.onclick = () => sendMessage(q);
+        wrap.appendChild(b);
+      });
+      container.appendChild(wrap);
+    }
+
+    async function regenerateReply(assistantMsgEl) {
+      if (!sessionId || sending) return;
+      const box = $('#messages');
+      let node = assistantMsgEl;
+      while (node && node.nextSibling) node.nextSibling.remove();
+      if (node?.parentNode === box) node.remove();
+      await api('/api/chat/regenerate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ session_id: sessionId }) });
+      await sendMessage('', { regenerate: true });
+    }
+
+    function renderMessages(messages) {
+      const box = $('#messages');
+      box.innerHTML = '';
+      if (!messages.length) { box.innerHTML = buildWelcomeHtml(); bindChips(); return; }
+      messages.forEach(m => {
+        const { msgBody } = appendMessage(m.role, m.content, false);
+        if (m.role === 'assistant' && m.trace?.length && window.JunoCursorUI) {
+          window.JunoCursorUI.replayTrace(msgBody, m.trace);
+        }
+      });
+      stickToBottom = true;
+      scrollMessages(true);
+    }
+
+    function modePlaceholder() {
+      if (chatMode === 'chat') return '正在思考…';
+      if (planMode) return '规划中…';
+      if (askMode) return '只读模式…';
+      return '正在想…';
+    }
+
+    function usesAgentRail() {
+      return agentMode || askMode || planMode;
+    }
+
+    function appendMessage(role, content, scroll = true) {
+      $('#welcome')?.remove();
+      const box = $('#messages');
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      if (role === 'user') {
+        div.innerHTML = `<div class="msg-body"><div class="user-query"></div><div class="bubble" style="display:none"></div>${messageActionsHtml(role)}</div>`;
+        div.querySelector('.user-query').textContent = content || '';
+      } else {
+        div.innerHTML = `<div class="msg-body"><div class="bubble"></div>${messageActionsHtml(role)}</div>`;
+      }
+      box.appendChild(div);
+      const msgBody = div.querySelector('.msg-body');
+      const bubble = div.querySelector('.bubble');
+      let rail = null;
+      if (role === 'assistant' && !content) {
+        if (usesAgentRail()) {
+          rail = new AgentRail(msgBody);
+          bubble.innerHTML = '<p class="think-placeholder">' + esc(modePlaceholder()) + '</p>';
+        } else {
+          bubble.innerHTML = '<p class="think-placeholder">正在思考…</p>';
+        }
+      } else if (role === 'assistant') {
+        setBubbleContent(bubble, role, content);
+      }
+      bindMessageActions(div, role, () => {
+        if (role === 'user') return div.querySelector('.user-query')?.textContent || '';
+        return bubble.classList.contains('rich') ? bubble.innerText : (bubble.querySelector('.stream-line')?.textContent || bubble.textContent || '');
+      });
+      if (scroll) scrollMessages();
+      return { bubble, msgEl: div, msgBody, rail };
+    }
+
+    const scrollBox = () => $('#messages-scroll');
+
+    let scrollRaf = null;
+    function scrollMessages(force) {
+      const box = scrollBox();
+      if (!box || (!force && !stickToBottom)) return;
+      if (scrollRaf) return;
+      scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = null;
+        box.scrollTop = box.scrollHeight;
+        stickToBottom = true;
+        $('#scroll-fab')?.classList.remove('show');
+      });
+    }
+
+    function setStreamingScroll(on) {
+      scrollBox()?.classList.toggle('streaming-active', !!on);
+    }
+
+    scrollBox()?.addEventListener('scroll', () => {
+      const box = scrollBox();
+      if (!box) return;
+      stickToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
+      $('#scroll-fab')?.classList.toggle('show', !stickToBottom);
+    });
+    $('#scroll-fab').onclick = () => scrollMessages(true);
+
+    async function openSession(id) {
+      sessionId = id;
+      window.__junoSessionId = id;
+      const s = await api('/api/chat/session?id=' + encodeURIComponent(id));
+      $('#chat-title').textContent = s.title || '对话';
+      pendingAttachments = (s.attachments || []).map(a => ({ ...a }));
+      renderAttachBar();
+      renderMessages(s.messages || []);
+      window.JunoCursorUI?.onSessionMessages(s.messages || []);
+      window.JunoCursorUI?.reviewBar?.loadFromServer();
+      loadSessions(id);
+    }
+
+    async function newChat() {
+      closeSidebar();
+      const s = await api('/api/chat/new', { method:'POST', headers:{'Content-Type':'application/json'}, body: '{}' });
+      sessionId = s.id;
+      window.__junoSessionId = s.id;
+      pendingAttachments = [];
+      renderAttachBar();
+      $('#chat-title').textContent = '新对话';
+      renderMessages([]);
+      loadSessions(sessionId);
+      toast('新对话已创建');
+    }
+
+    async function sendMessage(text, opts = {}) {
+      const regenerate = !!opts.regenerate;
+      text = regenerate ? '' : (text || $('#input').value).trim();
+      const pathOnly = !regenerate && tryAttachPathFromText(text);
+      if (pathOnly) {
+        $('#input').value = '';
+        resetInputHeight();
+        await attachWorkspacePath(pathOnly);
+        return;
+      }
+      const ctx = window.__junoContextPaths?.() || [];
+      const hasAttach = pendingAttachments.length > 0;
+      if ((!text && !regenerate && !hasAttach && !ctx.length) || sending) return;
+
+      if (!regenerate && text.startsWith('/')) {
+        const parts = text.slice(1).trim().split(/\s+/);
+        const item = window.JunoSlash?.commands?.find(c => c.cmd === (parts[0] || '').toLowerCase());
+        if (item) {
+          $('#input').value = '';
+          resetInputHeight();
+          document.getElementById('slash-menu')?.classList.remove('show');
+          try {
+            const arg = parts.slice(1).join(' ');
+            if (item.async) await item.run(arg);
+            else item.run(arg);
+          } catch (e) { toast('命令失败：' + e.message); }
+          return;
+        }
+      }
+
+      acquireSendLock();
+      if (!regenerate) {
+        $('#input').value = '';
+        resetInputHeight();
+        appendMessage('user', text);
+      }
+      const { bubble, msgBody, rail } = appendMessage('assistant', '');
+      const live = new LiveStream(bubble, () => scrollMessages());
+      setStreamingScroll(true);
+      setJunoState('thinking');
+
+      let gotText = false;
+      let finalized = false;
+      const stopThinkUI = () => setJunoState(null);
+
+      const finalizeBubble = (finalText, sid) => {
+        if (finalized) return;
+        finalized = true;
+        live.finish();
+        rail?.finish();
+        setStreamingScroll(false);
+        stopThinkUI();
+        bubble.classList.remove('streaming');
+        const content = finalText || live.raw || '（无回复）';
+        setBubbleContent(bubble, 'assistant', content);
+        const msgEl = msgBody?.closest('.msg');
+        if (msgEl) bindMessageActions(msgEl, 'assistant', () => content);
+        renderFollowups(msgBody, suggestFollowups(content));
+        if (sid) sessionId = sid;
+        if (!regenerate && text) $('#chat-title').textContent = text.slice(0, 32);
+        loadSessions(sessionId);
+        setJunoState(null);
+        scrollMessages();
+      };
+
+      const finishOk = (content, sid) => {
+        finalizeBubble(content || live.raw || '（无回复）', sid);
+      };
+
+      const handleSseBlock = (block, state) => {
+        if (!block.trim()) return;
+        let event = 'message', data = '';
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) event = line.slice(6).trim();
+          else if (line.startsWith('data:')) data = line.slice(5).trim();
+        }
+        if (!data) return;
+        const obj = JSON.parse(data);
+        if (event === 'plan' || event === 'prefetch' || event === 'tool' || event === 'thinking_delta' || event === 'subagent') {
+          if (!usesAgentRail()) return;
+          setJunoState('thinking');
+          if (bubble.querySelector('.think-placeholder')) bubble.innerHTML = '';
+          if (event === 'thinking_delta' && obj.text) {
+            rail?.push({ type: 'thinking_delta', text: obj.text });
+            scrollMessages();
+            return;
+          }
+          rail?.push({ ...obj, type: event, id: obj.id || (event + '-' + (obj.label || obj.name || '') + '-' + (obj.phase || '')) });
+          if (event === 'subagent') window.JunoCursorUI?.onSubagent(obj);
+          if (event === 'tool' && obj.phase === 'done') {
+            window.JunoCursorUI?.onTraceDone([obj]);
+          }
+          scrollMessages();
+          return;
+        }
+        if (event === 'status' && (obj.phase === 'streaming' || obj.phase === 'agent') && !gotText) {
+          setJunoState('streaming');
+          bubble.classList.add('streaming');
+        }
+        if (event === 'delta' && obj.text) {
+          if (!gotText) {
+            gotText = true;
+            setJunoState('streaming');
+            bubble.classList.add('streaming');
+          }
+          state.acc += obj.text;
+          live.push(obj.text);
+        } else if (event === 'done') {
+          state.sid = obj.session_id;
+          if (obj.content) state.acc = obj.content;
+          if (obj.syncing) state.syncing = true;
+          if (obj.trace) window.JunoCursorUI?.onTraceDone(obj.trace);
+          window.JunoCursorUI?.loadTodos?.();
+        } else if (event === 'error') throw new Error(obj.message || '流式错误');
+      };
+
+      try {
+        await ensureSession();
+        try {
+          await api('/api/chat/status');
+        } catch (_) {
+          throw new Error('服务未连接（8765）。请确认 Juno 已启动后 Ctrl+Shift+R 刷新');
+        }
+        window.__junoSessionId = sessionId;
+        let msgText = text;
+        const body = {
+          session_id: sessionId, stream: true,
+          chat_mode: chatMode,
+          agent_mode: agentMode, ask_mode: askMode, plan_mode: planMode,
+          context_paths: ctx.map(c => ({ path: c.path, label: c.label, kind: c.kind, snippet: c.snippet })),
+        };
+        if (regenerate) body.regenerate = true;
+        else body.message = msgText;
+        pendingAttachments = [];
+        renderAttachBar();
+        window.__junoClearContext?.();
+        const resp = await fetch('/api/chat/send', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+          signal: abortCtrl?.signal,
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || '请求失败');
+        }
+        const ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('event-stream')) {
+          const data = await resp.json();
+          finishOk(data.content, data.session_id);
+          return;
+        }
+        const state = { acc: '', sid: null };
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (value) {
+            buf += dec.decode(value, { stream: true });
+            const parts = buf.split('\n\n');
+            buf = parts.pop() || '';
+            for (const block of parts) handleSseBlock(block, state);
+          }
+          if (done) { if (buf.trim()) handleSseBlock(buf, state); break; }
+        }
+        finishOk(state.acc, state.sid);
+        if (state.syncing) setTimeout(() => toast(agentMode ? 'Agent 完成 · 已同步知识库' : '已同步到知识库 · 自主学习中'), 400);
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          stopThinkUI();
+          live.finish();
+          const partial = live.raw.trim();
+          if (partial) setBubbleContent(bubble, 'assistant', partial + '\n\n（已停止）');
+          else bubble.innerHTML = '<p>（已停止生成）</p>';
+          return;
+        }
+        if (!gotText) {
+          try {
+            const body = {
+              session_id: sessionId, stream: false,
+              chat_mode: chatMode,
+              agent_mode: agentMode, ask_mode: askMode, plan_mode: planMode,
+              context_paths: (window.__junoContextPaths?.() || []).map(c => ({ path: c.path, label: c.label, kind: c.kind, snippet: c.snippet })),
+            };
+            if (regenerate) body.regenerate = true;
+            else body.message = text;
+            window.__junoClearContext?.();
+            const data = await api('/api/chat/send', {
+              method: 'POST', headers: {'Content-Type':'application/json'},
+              body: JSON.stringify(body),
+            });
+            finishOk(data.content, data.session_id);
+            return;
+          } catch (e2) {
+            stopThinkUI();
+            live.finish();
+            bubble.classList.remove('streaming');
+            bubble.innerHTML = '<p>出错了：' + esc(e2.message || e.message) + '</p>';
+            if (/failed to fetch|network|服务未连接/i.test(String(e2.message || e.message))) {
+              bubble.innerHTML += '<p style="color:var(--muted);font-size:.78rem;margin-top:.5rem">读文件请切 <b>∞ Agent</b>；Chat 模式无工具。服务断了就重启：<code>python scripts/juno_training_server.py</code></p>';
+            }
+          }
+        } else {
+          stopThinkUI();
+          live.finish();
+          if (!live.raw.trim()) bubble.innerHTML = '<p>出错了：' + esc(e.message) + '</p>';
+        }
+      } finally {
+        stopThinkUI();
+        live.finish();
+        setStreamingScroll(false);
+        bubble.classList.remove('streaming');
+        releaseSendLock();
+      }
+    }
+
+    function autoResize() {
+      const ta = $('#input');
+      if (!ta) return;
+      ta.style.height = 'auto';
+      const h = Math.max(36, Math.min(ta.scrollHeight || 36, 160));
+      ta.style.height = h + 'px';
+    }
+
+    function resetInputHeight() {
+      const ta = $('#input');
+      if (!ta) return;
+      ta.style.height = '36px';
+    }
+
+    function bindChips() {
+      $$('.chip').forEach(c => c.onclick = () => sendMessage(c.dataset.q));
+      $$('.tool-chip').forEach(c => c.onclick = () => sendMessage(c.dataset.q));
+    }
+
+    function bindAllButtons() {
+      const once = (id, fn) => {
+        const el = document.getElementById(id);
+        if (!el || el.dataset.bound) return;
+        el.dataset.bound = '1';
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          fn(e, el);
+        });
+      };
+
+      once('btn-rail-home', () => { closeSidebar(); toast('Juno · Agent 对话'); });
+      once('btn-rail-history', () => {
+        toggleSidebar();
+        toast(document.getElementById('app-root')?.classList.contains('sidebar-open') ? '历史对话' : '已关闭侧栏');
+      });
+      once('btn-rail-new', () => newChat());
+      once('btn-rail-explorer', () => {
+        window.JunoExplorer?.toggle();
+        toast(document.getElementById('app-root')?.classList.contains('explorer-open') ? '资源管理器' : '已关闭文件树');
+      });
+      once('btn-rail-subagent', () => {
+        const p = window.JunoCursorUI?.subagentPanel;
+        if (p) { p.toggle(); toast(p.panel?.classList.contains('open') ? '子代理面板' : '已关闭子代理'); }
+        else toast('子代理模块未加载');
+      });
+      once('btn-rail-terminal', () => {
+        const t = window.JunoCursorUI?.terminal;
+        if (t) { t.toggle(); toast(t.panel?.classList.contains('open') ? '终端输出' : '已关闭终端'); }
+        else toast('终端模块未加载');
+      });
+      once('btn-rail-cmdk', () => {
+        if (window.JunoCursorUI?.cmdk) { window.JunoCursorUI.cmdk.open(); toast('Inline Edit · Ctrl+K'); }
+        else toast('Cmd+K 模块未加载');
+      });
+      once('btn-rail-settings', () => { refreshStatus(); $('#modal')?.classList.add('show'); toast('模型设置'); });
+
+      once('btn-new-top', () => newChat());
+      once('btn-new', () => newChat());
+      once('btn-panel-chat', () => toggleSidebar());
+      once('btn-panel-title', () => toggleSidebar());
+      once('btn-panel-history', () => toggleSidebar());
+      once('btn-send', () => sendMessage());
+      once('btn-stop', () => { if (abortCtrl) abortCtrl.abort(); toast('已停止'); });
+      /* btn-upload → bindAttachMenu() */
+      once('btn-lock', () => {
+        if (chatMode === 'agent') applyChatMode('ask');
+        else if (chatMode === 'ask') applyChatMode('plan');
+        else applyChatMode('agent');
+      });
+      once('btn-mode', (e) => { e.stopPropagation(); $('#mode-menu')?.classList.toggle('open'); });
+      once('btn-settings-head', (e) => { e.stopPropagation(); $('#head-menu')?.classList.toggle('open'); });
+      once('btn-settings', () => { refreshStatus(); $('#modal')?.classList.add('show'); toast('模型设置'); });
+
+      const ab = document.querySelector('.auto-badge');
+      if (ab && !ab.dataset.bound) {
+        ab.dataset.bound = '1';
+        ab.style.cursor = 'pointer';
+        ab.addEventListener('click', () => toast('Auto：自动编排层，按任务选技能与工具'));
+      }
+
+      $('#head-menu')?.querySelectorAll('[data-action]').forEach(btn => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', async () => {
+          $('#head-menu')?.classList.remove('open');
+          const a = btn.dataset.action;
+          if (a === 'settings') { refreshStatus(); $('#modal')?.classList.add('show'); toast('模型设置'); }
+          else if (a === 'mcp') { window.JunoMcpModal?.open(); toast('MCP 服务器'); }
+          else if (a === 'studio') location.href = '/studio';
+          else if (a === 'rebuild') {
+            toast('正在重建索引…');
+            try {
+              await api('/api/index/rebuild', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+              toast('索引重建完成'); refreshStatus();
+            } catch (e) { toast('索引失败：' + e.message); }
+          } else if (a === 'sync') {
+            toast('同步中…');
+            try {
+              await api('/api/sync', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+              toast('知识库已同步');
+            } catch (e) { toast('同步失败：' + e.message); }
+          }
+        });
+      });
+
+      document.getElementById('sidebar-overlay')?.addEventListener('click', closeSidebar);
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('#head-menu') && !e.target.closest('#btn-settings-head')) {
+          $('#head-menu')?.classList.remove('open');
+        }
+        if (!e.target.closest('#mode-menu') && !e.target.closest('#btn-mode')) {
+          $('#mode-menu')?.classList.remove('open');
+        }
+      });
+    }
+
+    window.__junoNewChat = newChat;
+    window.__junoApplyChatMode = applyChatMode;
+    window.__junoToast = toast;
+    window.__junoRefreshStatus = refreshStatus;
+    window.__junoOpenSidebar = openSidebar;
+    window.__junoCloseSidebar = closeSidebar;
+    window.__junoToggleSidebar = toggleSidebar;
+    window.__junoBindAllButtons = bindAllButtons;
+
+    $('#input').oninput = autoResize;
+    $('#input').onkeydown = e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      if (e.key === 'Escape' && sending) abortCtrl?.abort();
+    };
+    $('#btn-rebuild-index')?.addEventListener('click', async () => {
+      toast('正在重建索引…');
+      try {
+        await api('/api/index/rebuild', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+        toast('索引重建完成');
+        refreshStatus();
+      } catch (e) { toast('索引失败：' + e.message); }
+    });
+    $('#btn-sync-knowledge')?.addEventListener('click', async () => {
+      toast('同步中…');
+      try {
+        await api('/api/sync', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+        toast('知识库已同步');
+        refreshStatus();
+      } catch (e) { toast('同步失败：' + e.message); }
+    });
+    $('#btn-modal-close').onclick = () => $('#modal').classList.remove('show');
+    $('#cfg-provider').onchange = toggleCloudFields;
+    $('#btn-save-config').onclick = async () => {
+      const provider = $('#cfg-provider').value;
+      const body = { provider, model: $('#cfg-model').value.trim() || undefined };
+      if (provider === 'openai_compatible') {
+        body.api_key = $('#cfg-key').value.trim();
+        body.api_base = $('#cfg-base').value.trim() || undefined;
+      } else body.api_base = 'http://127.0.0.1:11434';
+      await api('/api/chat/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      $('#modal').classList.remove('show');
+      toast('设置已保存');
+      refreshStatus();
+    };
+
+    bindChips();
+    bindAllButtons();
+    loadPresets();
+    refreshStatus();
+    resetInputHeight();
+    bindAttachMenu();
+    initComposerDrop();
+    loadSessions(null);
+    $('#hist-search')?.addEventListener('input', () => loadSessions(sessionId));
+    (async () => {
+      const r = await api('/api/chat/sessions');
+      if (r.items?.length) await openSession(r.items[0].id);
+      else await newChat();
+    })();
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="/cursor-diff-editor.js?v=27"></script>
+  <script src="/cursor-terminal.js?v=27"></script>
+  <script src="/cursor-cmdk.js?v=27"></script>
+  <script src="/cursor-explorer.js?v=27"></script>
+  <script src="/cursor-slash.js?v=27"></script>
+  <script src="/cursor-mcp-modal.js?v=27"></script>
+  <script src="/cursor-ui.js?v=27"></script>
+</body>
+</html>

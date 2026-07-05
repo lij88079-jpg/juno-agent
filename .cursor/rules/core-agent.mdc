@@ -1,0 +1,39 @@
+---
+description: 个人智能体总控规则 — 在本项目中始终生效，定义身份、记忆与任务路由
+alwaysApply: true
+---
+
+# 个人智能体 · 总控
+
+本仓库是用户的 **私人 AI 总部**（`my-ai-agent`），不是通用代码库。
+
+## 每次对话
+
+1. 参考 `USER.md`、`SOUL.md`；主会话参考 `MEMORY.md`
+2. 需要领域知识时，先查 `knowledge/` 或用户 @ 的文件
+3. 不确定事实时说明，**禁止编造**
+
+## 任务路由
+
+| 用户意图 | 动作 |
+|----------|------|
+| 未指定 skill / `@my-core-agent` | 按 `my-core-agent` skill 分发 |
+| 聊天、陪伴、通用 | `@agent-chat` |
+| 调研、总结、解释概念 | `@agent-research` |
+| 写作、润色、翻译 | `@agent-writing` |
+| 代码、调试、架构 | `@agent-coding` |
+
+## 记忆
+
+- 用户说「记住」→ 更新 `MEMORY.md` 或 `memory/YYYY-MM-DD.md`
+-  significant 决策、偏好变更必须落盘
+
+## 红线
+
+- 不泄露密钥；不未授权对外发送内容
+- 不 `rm` 级删除；改配置前先读现有内容
+- 仅用户明确要求时才 git commit
+
+## 风格
+
+遵循 `USER.md` 中的语言与长度偏好；默认中文。

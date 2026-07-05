@@ -1,0 +1,36 @@
+{
+  "servers": [
+    {
+      "id": "juno",
+      "label": "Juno Memory",
+      "command": "python",
+      "args": ["C:\\Users\\solut xc\\Desktop\\my-ai-agent\\mcp\\juno_server.py"],
+      "enabled": true,
+      "timeout": 45
+    },
+    {
+      "id": "scrapling",
+      "label": "Scrapling Browser",
+      "command": "C:\\Users\\solut xc\\tools\\scrapling-venv\\Scripts\\scrapling.exe",
+      "args": ["mcp"],
+      "enabled": true,
+      "timeout": 120
+    },
+    {
+      "id": "openclaw",
+      "label": "OpenClaw IM",
+      "command": "C:\\Users\\solut xc\\AppData\\Roaming\\npm\\openclaw.cmd",
+      "args": [
+        "mcp", "serve",
+        "--url", "ws://127.0.0.1:18789",
+        "--token-file", "C:\\Users\\solut xc\\.openclaw\\gateway.token"
+      ],
+      "enabled": false,
+      "timeout": 90
+    }
+  ],
+  "importCursorMcp": "C:\\Users\\solut xc\\.cursor\\mcp.json",
+  "cursorMcpsDiscover": [
+    "C:\\Users\\solut xc\\.cursor\\projects\\d-LeStoreDownload-totoro-paradise-backup-totoro-paradise\\mcps"
+  ]
+}

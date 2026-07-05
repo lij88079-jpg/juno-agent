@@ -1,0 +1,29 @@
+# Secrets & local config
+config/chat.local.json
+.env
+*.local.json
+.env.*
+
+# Private runtime data (do not publish)
+memory/chat-sessions/
+memory/daily/
+knowledge/conversations/auto/
+config/index/
+config/sync-state.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Temp / uploads
+.tmp/
+uploads/

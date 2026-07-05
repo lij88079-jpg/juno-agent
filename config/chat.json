@@ -1,0 +1,43 @@
+{
+  "provider": "ollama",
+  "api_base": "http://127.0.0.1:11434",
+  "model": "qwen2.5:7b",
+  "max_tokens": 4096,
+  "temperature": 0.7,
+  "presets": {
+    "ollama": {
+      "label": "Ollama 本地（推荐）",
+      "provider": "ollama",
+      "api_base": "http://127.0.0.1:11434",
+      "model": "qwen2.5:7b"
+    },
+    "ollama_llama3": {
+      "label": "Ollama · llama3:8b（已安装）",
+      "provider": "ollama",
+      "api_base": "http://127.0.0.1:11434",
+      "model": "llama3:8b"
+    },
+    "lmstudio": {
+      "label": "LM Studio（需先开 Local Server）",
+      "provider": "openai_compatible",
+      "api_base": "http://127.0.0.1:1234",
+      "model": "local-model",
+      "api_key": "lm-studio"
+    },
+    "deepseek": {
+      "label": "DeepSeek API（官方 · deepseek-chat）",
+      "provider": "openai_compatible",
+      "api_base": "https://api.deepseek.com",
+      "model": "deepseek-chat",
+      "prompt_mode": "full"
+    },
+    "qiankun_ds": {
+      "label": "乾坤AI · DeepSeek V4 Pro（同项目 Key）",
+      "provider": "openai_compatible",
+      "api_base": "https://api.deepseek.com",
+      "model": "deepseek-v4-pro",
+      "prompt_mode": "full",
+      "env_file": "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise\\.tmp-muse-ai-review\\backend\\.env"
+    }
+  }
+}

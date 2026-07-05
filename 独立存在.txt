@@ -1,0 +1,73 @@
+# Juno 怎样「独立存在」
+
+Juno 的「独立」= **不依赖 Cursor、不依赖云 API**，全部在你自己电脑上跑。
+
+---
+
+## 架构（三层）
+
+```
+┌─────────────────────────────────────┐
+│  Juno 对话窗口（浏览器独立窗口）      │  ← 你看到的界面
+├─────────────────────────────────────┤
+│  Juno 服务（本机 Python，8765 端口）  │  ← 读 MEMORY / USER / 训练样本
+├─────────────────────────────────────┤
+│  Ollama 本地模型（本机 11434 端口）   │  ← 「大脑」，完全离线、免费
+└─────────────────────────────────────┘
+```
+
+**身份与记忆** 在 `my-ai-agent` 文件夹里（SOUL / USER / MEMORY），不绑 Cursor。  
+**推理** 由本机 Ollama 完成，不用买 DeepSeek/OpenAI Key。
+
+---
+
+## 一键启动（推荐）
+
+1. 安装 [Ollama](https://ollama.com/download)（只需一次）
+2. 双击 **`scripts\启动Juno.bat`**
+   - 自动检查 Ollama
+   - 自动下载模型 `qwen2.5:7b`（首次约 4GB）
+   - 启动服务 + 弹出对话窗口
+
+之后每天：**双击 `启动Juno.bat` 就能聊**，不用开 Cursor。
+
+---
+
+## Juno 住在哪
+
+| 内容 | 位置 |
+|------|------|
+| 人设 | `SOUL.md` |
+| 你的画像 | `USER.md` |
+| 长期记忆 | `MEMORY.md` |
+| 聊天记录 | `memory/chat-sessions/` |
+| 训练样本 | `training/examples.jsonl` |
+| Cursor 历史（可选同步） | `knowledge/conversations/auto/` |
+
+换电脑 = 拷贝整个 `my-ai-agent` 文件夹 + 重装 Ollama 即可。
+
+---
+
+## 和 Cursor 版的关系
+
+| | **独立 Juno** | **Cursor @my-core-agent** |
+|---|---|---|
+| 要不要 Cursor | ❌ | ✅ |
+| 要不要云 API | ❌（Ollama） | ❌（用 Cursor 订阅） |
+| 改代码/跑命令 | ❌ | ✅ |
+| 独立窗口 | ✅ | ❌ |
+
+**建议**：日常闲聊、问问题 → 独立 Juno；写代码、改项目 → Cursor。
+
+---
+
+## 可选：固定到桌面 / 开机自启
+
+- 右键 `启动Juno.bat` → 发送到 → 桌面快捷方式
+- 开机自启：Win+R → `shell:startup` → 把快捷方式放进去
+
+---
+
+## 仍想用云 API？
+
+对话窗口 → **模型设置** → 切换「云端 API」→ 填 DeepSeek Key 即可。

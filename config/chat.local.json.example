@@ -1,0 +1,5 @@
+{
+  "api_key": "sk-你的DeepSeek或OpenAI密钥",
+  "model": "deepseek-chat",
+  "api_base": "https://api.deepseek.com"
+}

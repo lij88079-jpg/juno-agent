@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juno Studio · Beta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg0: #1e1e1e;
+      --bg1: #252526;
+      --bg2: #2d2d2d;
+      --glass: rgba(37, 37, 38, 0.96);
+      --glass2: #2a2d2e;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(255, 255, 255, 0.14);
+      --text: #cccccc;
+      --muted: #858585;
+      --dim: #6e6e6e;
+      --accent: #3794ff;
+      --accent2: #4ec9b0;
+      --accent3: #4ec9b0;
+      --ok: #89d185;
+      --user-bubble: rgba(38, 79, 120, 0.55);
+      --ai-bubble: rgba(37, 37, 38, 0.9);
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      --radius: 10px;
+      --sidebar: 240px;
+      --rail-h: 56px;
+      --status-h: 0px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--bg0);
+      overflow: hidden;
+    }
+    .bg {
+      position: fixed; inset: 0; z-index: 0;
+      background: var(--bg0);
+    }
+    .grid-overlay { display: none; }
+    .app {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-columns: var(--sidebar) 1fr;
+      height: 100vh;
+      height: 100dvh;
+    }
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: #333333;
+      display: flex;
+      flex-direction: column;
+      padding: .85rem 0;
+      min-height: 0;
+      z-index: 220;
+    }
+    .sidebar-backdrop {
+      display: none;
+      position: fixed; inset: 0; z-index: 210;
+      background: rgba(0,0,0,.55);
+    }
+    .sidebar-backdrop.show { display: block; }
+    .brand {
+      display: flex; align-items: center; gap: .75rem;
+      padding: 0 1rem 1rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: .5rem;
+    }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 6px;
+      background: var(--accent);
+      display: grid; place-items: center;
+      font-weight: 700; font-size: .85rem;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .brand h1 { margin: 0; font-size: .95rem; font-weight: 600; }
+    .brand p { margin: .1rem 0 0; font-size: .68rem; color: var(--muted); }
+    .nav { flex: 1; padding: .15rem .55rem; overflow-y: auto; }
+    .nav-btn {
+      width: 100%; display: flex; align-items: center; gap: .55rem;
+      padding: .55rem .65rem; margin-bottom: .15rem;
+      border: none; border-radius: 6px;
+      background: none; color: var(--muted);
+      cursor: pointer; font: inherit; font-size: .84rem;
+      transition: background .12s, color .12s;
+    }
+    .nav-btn svg { width: 16px; height: 16px; opacity: .75; flex-shrink: 0; }
+    .nav-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
+    .nav-btn.active {
+      background: rgba(255,255,255,.1);
+      color: #fff;
+    }
+    .nav-btn.active svg { opacity: 1; }
+    .sidebar-foot {
+      padding: .75rem 1rem 0;
+      border-top: 1px solid var(--border);
+      font-size: .68rem; color: var(--dim); line-height: 1.45;
+    }
+    .main {
+      display: flex; flex-direction: column;
+      min-width: 0; min-height: 0; overflow: hidden;
+      padding-bottom: var(--status-h);
+      transition: padding-bottom .2s ease;
+    }
+    .main.status-open { --status-h: min(220px, 32vh); }
+    .topbar {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: .75rem; flex-wrap: wrap;
+      padding: .75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg1);
+      flex-shrink: 0;
+    }
+    .topbar-left { display: flex; align-items: flex-start; gap: .55rem; min-width: 0; }
+    .menu-btn {
+      display: none;
+      width: 34px; height: 34px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg2);
+      color: var(--text); cursor: pointer; flex-shrink: 0;
+      align-items: center; justify-content: center;
+    }
+    .menu-btn svg { width: 18px; height: 18px; }
+    .topbar h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+    .topbar .sub { color: var(--muted); font-size: .76rem; margin-top: .15rem; }
+    .metrics { display: flex; gap: .45rem; flex-wrap: wrap; }
+    .metric {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 6px; padding: .35rem .65rem;
+      font-size: .72rem; color: var(--muted);
+    }
+    .metric strong { color: var(--text); font-weight: 600; margin-left: .2rem; }
+    .content { flex: 1; overflow: auto; padding: 1rem; min-height: 0; -webkit-overflow-scrolling: touch; }
+    .panel { display: none; animation: fadeIn .2s ease; }
+    .panel.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    .hero {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.15rem 1.2rem;
+      margin-bottom: .85rem;
+    }
+    .hero h3 { margin: 0 0 .4rem; font-size: 1.15rem; font-weight: 600; }
+    .hero p { margin: 0; color: var(--muted); line-height: 1.55; max-width: 720px; font-size: .86rem; }
+    .hero-actions { margin-top: .85rem; display: flex; gap: .45rem; flex-wrap: wrap; }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-bottom: .85rem; }
+    .stat-card {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .9rem 1rem;
+    }
+    .stat-card .label { font-size: .72rem; color: var(--muted); margin-bottom: .25rem; }
+    .stat-card .value { font-size: 1.45rem; font-weight: 700; letter-spacing: -.02em; }
+    .stat-card .value.accent { color: var(--accent); }
+    .stat-card .value.sm { font-size: .95rem; font-weight: 600; padding-top: .2rem; }
+
+    .card {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem;
+      margin-bottom: .75rem;
+    }
+    .card h4 { margin: 0 0 .5rem; font-size: .88rem; display: flex; align-items: center; gap: .4rem; font-weight: 600; }
+    .card p { margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+    .card code { font-family: "JetBrains Mono", monospace; font-size: .78rem; color: #9cdcfe; }
+
+    .steps { display: grid; gap: .65rem; }
+    .step {
+      display: grid; grid-template-columns: 32px 1fr; gap: .75rem; align-items: start;
+      background: var(--glass2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .85rem;
+    }
+    .step-num {
+      width: 32px; height: 32px; border-radius: 6px;
+      background: var(--accent); color: #fff;
+      display: grid; place-items: center; font-weight: 700; font-size: .82rem;
+    }
+    .step h5 { margin: 0 0 .25rem; font-size: .86rem; font-weight: 600; }
+    .step p { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.5; }
+    .step .step-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .35rem; }
+    .code-chip {
+      display: flex; align-items: flex-start; justify-content: space-between; gap: .5rem;
+      margin-top: .45rem; padding: .45rem .6rem;
+      background: rgba(0,0,0,.25); border: 1px solid var(--border);
+      border-radius: 6px; font-family: "JetBrains Mono", monospace;
+      font-size: .74rem; color: #ccc; width: 100%;
+      word-break: break-word;
+    }
+    .code-chip > span { flex: 1; min-width: 0; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+      padding: .45rem .85rem; border-radius: 6px;
+      font: inherit; font-size: .82rem; font-weight: 500;
+      cursor: pointer; border: none; transition: background .12s, border-color .12s;
+      white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-ghost {
+      background: transparent; color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { border-color: var(--border-hover); background: rgba(255,255,255,.04); }
+    .btn-sm { padding: .28rem .55rem; font-size: .72rem; }
+
+    .toolbar { display: flex; gap: .45rem; flex-wrap: wrap; margin-bottom: .75rem; align-items: center; }
+    .search {
+      flex: 1 1 180px; min-width: 0;
+      background: var(--bg2); border: 1px solid var(--border);
+      color: var(--text); border-radius: 6px;
+      padding: .45rem .7rem; font: inherit; font-size: .82rem;
+    }
+    .search:focus { outline: none; border-color: rgba(55,148,255,.45); }
+
+    .split {
+      display: grid; grid-template-columns: minmax(220px, 300px) 1fr;
+      gap: .75rem; min-height: min(520px, calc(100dvh - 220px));
+    }
+    .list {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: auto;
+      min-height: 200px;
+    }
+    .list-item {
+      padding: .65rem .8rem; border-bottom: 1px solid var(--border);
+      cursor: pointer; transition: background .12s;
+    }
+    .list-item:hover, .list-item.active { background: rgba(55,148,255,.1); }
+    .list-item .name { font-size: .8rem; font-weight: 500; margin-bottom: .15rem; word-break: break-all; }
+    .list-item .meta { font-size: .68rem; color: var(--dim); }
+
+    .chat-view {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: auto;
+      padding: .85rem; min-height: 200px;
+    }
+    .chat-empty { color: var(--muted); text-align: center; padding: 2.5rem 1rem; font-size: .82rem; }
+    .bubble {
+      max-width: min(88%, 640px); margin-bottom: .65rem;
+      padding: .6rem .85rem; border-radius: 8px;
+      font-size: .82rem; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
+    }
+    .bubble.user {
+      margin-left: auto;
+      background: var(--user-bubble);
+      border: 1px solid rgba(55,148,255,.25);
+    }
+    .bubble.assistant {
+      margin-right: auto;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+    }
+    .bubble-label {
+      font-size: .62rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .05em; margin-bottom: .25rem; opacity: .75;
+    }
+    .bubble.user .bubble-label { color: #79b8ff; }
+    .bubble.assistant .bubble-label { color: var(--accent2); }
+
+    .editor-wrap {
+      background: var(--glass); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+    }
+    .editor-head {
+      display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .35rem;
+      padding: .55rem .85rem; border-bottom: 1px solid var(--border);
+      font-size: .72rem; color: var(--muted);
+    }
+    textarea, input[type=text] {
+      width: 100%; background: transparent; border: none;
+      color: var(--text); padding: .85rem;
+      font-family: "JetBrains Mono", monospace;
+      font-size: .8rem; line-height: 1.55; resize: vertical;
+    }
+    textarea:focus, input[type=text]:focus { outline: none; }
+    .editor-body textarea { min-height: min(420px, 50vh); }
+
+    .train-form { display: grid; gap: .55rem; }
+    .train-form label { font-size: .72rem; color: var(--muted); font-weight: 500; }
+    .train-form input, .train-form textarea {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 6px; font-family: inherit;
+    }
+    .train-form textarea { min-height: 100px; }
+
+    .train-grid { display: grid; gap: .65rem; margin-top: .75rem; }
+    .train-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: .85rem;
+    }
+    .train-card .q { font-weight: 600; margin-bottom: .4rem; font-size: .86rem; }
+    .train-card .a { color: var(--muted); font-size: .8rem; line-height: 1.5; white-space: pre-wrap; margin-bottom: .55rem; }
+    .tags { display: flex; gap: .3rem; flex-wrap: wrap; margin-bottom: .55rem; }
+    .tag {
+      font-size: .65rem; padding: .15rem .45rem; border-radius: 999px;
+      background: rgba(55,148,255,.12); color: #79b8ff; border: 1px solid rgba(55,148,255,.22);
+    }
+
+    .callout {
+      border-left: 2px solid var(--accent);
+      padding: .75rem .85rem; margin-top: .85rem;
+      background: rgba(55,148,255,.06); border-radius: 0 6px 6px 0;
+      font-size: .82rem; color: var(--muted); line-height: 1.55;
+    }
+    .callout strong { color: var(--text); }
+
+    /* Bottom status panel — sync / activity log */
+    .status-panel {
+      position: fixed; left: var(--sidebar); right: 0; bottom: 0; z-index: 190;
+      height: var(--status-h); background: #1a1a1a;
+      border-top: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transition: height .2s ease;
+      overflow: hidden;
+    }
+    .status-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .35rem .75rem; flex-shrink: 0;
+      font-size: .72rem; font-weight: 600; color: var(--muted);
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      cursor: pointer; user-select: none;
+    }
+    .status-head .live-dot { color: var(--ok); font-size: .55rem; margin-right: .35rem; }
+    .status-actions { display: flex; gap: .35rem; }
+    .status-actions button {
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted); font: inherit; font-size: .65rem;
+      padding: .12rem .4rem; border-radius: 4px; cursor: pointer;
+    }
+    .status-body {
+      flex: 1; overflow: auto; padding: .4rem .75rem;
+      font-family: "JetBrains Mono", monospace; font-size: .72rem;
+      line-height: 1.45; color: #aaa;
+    }
+    .status-line { margin: 0 0 .15rem; }
+    .status-line.err { color: #f48771; }
+    .status-line.ok { color: var(--ok); }
+
+    .toast {
+      position: fixed; bottom: calc(1rem + var(--status-h)); right: 1rem; z-index: 300;
+      background: var(--bg2); border: 1px solid rgba(137,209,133,.35);
+      padding: .6rem .9rem; border-radius: 8px;
+      box-shadow: var(--shadow);
+      display: none; font-size: .82rem;
+      animation: slideUp .2s ease;
+      max-width: min(360px, calc(100vw - 2rem));
+    }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(8px); } }
+
+    /* Tablet */
+    @media (max-width: 1024px) {
+      .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-3 .stat-card:last-child { grid-column: 1 / -1; }
+      .split { grid-template-columns: 1fr; min-height: auto; }
+      .list { max-height: 220px; }
+      .chat-view { min-height: 280px; }
+    }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      :root { --sidebar: 0px; }
+      .app { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed; left: 0; top: 0; bottom: 0;
+        width: min(280px, 86vw);
+        transform: translateX(-105%);
+        transition: transform .22s ease;
+        box-shadow: var(--shadow);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .menu-btn { display: inline-flex; }
+      .status-panel { left: 0; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .grid-3 .stat-card:last-child { grid-column: auto; }
+      .hero-actions .btn { flex: 1 1 calc(50% - .45rem); min-width: 140px; }
+      .step { grid-template-columns: 28px 1fr; }
+      .topbar { padding: .65rem .75rem; }
+      .content { padding: .75rem; }
+      .metrics { width: 100%; }
+      .metric { flex: 1; text-align: center; min-width: 0; }
+    }
+
+    @media (max-width: 420px) {
+      .hero-actions .btn { flex: 1 1 100%; }
+      .stat-card .value { font-size: 1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="grid-overlay"></div>
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="avatar">J</div>
+        <div>
+          <h1>Juno Studio <span style="font-size:.65rem;font-weight:600;color:#79b8ff;border:1px solid rgba(88,166,255,.35);padding:.15rem .45rem;border-radius:5px;vertical-align:middle;letter-spacing:.04em">BETA</span></h1>
+          <p>Memory · Training · Chat archive</p>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="nav-btn active" data-tab="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          控制台
+        </button>
+        <button class="nav-btn" onclick="location.href='/chat'">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          打开对话窗口
+        </button>
+        <button class="nav-btn" data-tab="chat-guide">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          使用说明
+        </button>
+        <button class="nav-btn" data-tab="conversations">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          对话归档
+        </button>
+        <button class="nav-btn" data-tab="memory">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 5-7 13-7 13S5 14 5 9a7 7 0 0 1 7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+          长期记忆
+        </button>
+        <button class="nav-btn" data-tab="user">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          用户画像
+        </button>
+        <button class="nav-btn" data-tab="training">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          训练样本
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        对话在 <strong style="color:#ccc">/chat</strong> 或 Cursor<br>
+        本页负责记忆与训练
+      </div>
+    </aside>
+
+    <div class="main" id="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button type="button" class="menu-btn" id="menu-btn" aria-label="打开菜单">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          <div>
+            <h2 id="page-title">控制台</h2>
+            <div class="sub" id="page-sub">Juno 私人智能体 · 记忆与训练中心</div>
+          </div>
+        </div>
+        <div class="metrics">
+          <div class="metric">对话<strong id="stat-conv">-</strong></div>
+          <div class="metric">样本<strong id="stat-train">-</strong></div>
+          <div class="metric">同步<strong id="stat-sync">-</strong></div>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- Dashboard -->
+        <section id="dashboard" class="panel active">
+          <div class="hero">
+            <h3>欢迎回来，李俊呈</h3>
+            <p>Juno 是你的私人 AI。在 <a href="/chat" style="color:#79b8ff">/chat</a> 或 Cursor 里对话；这里负责同步聊天记录、编辑长期记忆、添加训练样本。</p>
+            <div class="hero-actions">
+              <button class="btn btn-primary" id="btn-sync">⟳ 同步 Cursor 对话</button>
+              <button class="btn btn-ghost" id="btn-sync-force">强制全量同步</button>
+              <button class="btn btn-ghost" onclick="location.href='/chat'">💬 打开独立对话窗口</button>
+              <button class="btn btn-ghost" data-goto="chat-guide">📖 使用说明</button>
+            </div>
+          </div>
+
+          <div class="grid-3">
+            <div class="stat-card">
+              <div class="label">已归档对话</div>
+              <div class="value accent" id="stat-conv-big">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">训练样本</div>
+              <div class="value" id="stat-train-big">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">上次同步</div>
+              <div class="value sm" id="stat-sync-big">-</div>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <h4>⚡ 自动同步</h4>
+              <p>已配置 Cursor Hook：每次 Agent 结束自动抓取聊天，存入 <code>knowledge/conversations/auto/</code>。若未生效，重启 Cursor。</p>
+            </div>
+            <div class="card">
+              <h4>🧠 让 Juno 学习</h4>
+              <p>同步后在 Cursor 输入下方指令，Juno 会把对话精华写入 MEMORY。</p>
+              <div class="code-chip" style="margin-top:.75rem">
+                <span>@agent-memory 总结 conversations/auto 最新记录，更新 MEMORY 草案</span>
+                <button class="btn btn-ghost btn-sm btn-copy" data-copy="@agent-memory 总结 conversations/auto 最新记录，更新 MEMORY 草案">复制</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Chat Guide -->
+        <section id="chat-guide" class="panel">
+          <div class="hero">
+            <h3>怎样跟 Juno 对话？</h3>
+            <p>推荐用本机 <strong><a href="/chat" style="color:#79b8ff">/chat 对话窗口</a></strong>（Agent 模式完整能力）；也可在 Cursor 里 @my-core-agent。本页只管记忆与训练。</p>
+          </div>
+
+          <div class="steps">
+            <div class="step">
+              <div class="step-num">1</div>
+              <div>
+                <h5>打开 Web 对话（推荐）</h5>
+                <p>浏览器访问 <code>/chat</code>，支持 Agent、拖入文件、内置终端。</p>
+                <div class="step-actions">
+                  <button class="btn btn-primary btn-sm" onclick="location.href='/chat'">打开 /chat</button>
+                </div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">2</div>
+              <div>
+                <h5>或打开 Juno 总部（Cursor）</h5>
+                <p>Cursor → 打开文件夹 → <code>Desktop\my-ai-agent</code></p>
+                <div class="step-actions">
+                  <button class="btn btn-ghost btn-sm btn-copy" data-copy="C:\Users\solut xc\Desktop\my-ai-agent">复制路径</button>
+                </div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">3</div>
+              <div>
+                <h5>@ 引用技能后说话</h5>
+                <div class="code-chip">
+                  <span>@my-core-agent 你好 Juno，介绍一下你自己</span>
+                  <button class="btn btn-ghost btn-sm btn-copy" data-copy="@my-core-agent 你好 Juno，介绍一下你自己">复制</button>
+                </div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">4</div>
+              <div>
+                <h5>按场景选技能（可选）</h5>
+                <div class="code-chip"><span>@agent-chat · @agent-research · @agent-coding · @agent-memory</span></div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-num">5</div>
+              <div>
+                <h5>聊完 → 同步 → 编辑记忆</h5>
+                <p>对话自动归档到「对话归档」，在此更新 MEMORY / 训练样本。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout">
+            <strong>一句话：</strong>在 /chat 或 Cursor 里说话；在本页管记忆和训练。
+          </div>
+        </section>
+
+        <!-- Conversations -->
+        <section id="conversations" class="panel">
+          <div class="toolbar">
+            <input class="search" id="conv-search" placeholder="搜索对话文件名…" />
+            <button class="btn btn-ghost" id="btn-refresh-conv">刷新</button>
+          </div>
+          <div class="split">
+            <div class="list" id="conv-list"></div>
+            <div class="chat-view" id="conv-preview">
+              <div class="chat-empty">← 选择左侧对话，以聊天气泡形式预览</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Memory -->
+        <section id="memory" class="panel">
+          <div class="editor-wrap">
+            <div class="editor-head">
+              <span>MEMORY.md · 长期记忆</span>
+              <span id="memory-meta">-</span>
+            </div>
+            <div class="editor-body">
+              <textarea id="memory-editor" placeholder="# Juno 的长期记忆…"></textarea>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top:.85rem">
+            <button class="btn btn-primary" id="btn-save-memory">保存 MEMORY</button>
+          </div>
+        </section>
+
+        <!-- User -->
+        <section id="user" class="panel">
+          <div class="editor-wrap">
+            <div class="editor-head">
+              <span>USER.md · 你的画像与偏好</span>
+              <span id="user-meta">-</span>
+            </div>
+            <div class="editor-body">
+              <textarea id="user-editor" placeholder="# 关于我…"></textarea>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top:.85rem">
+            <button class="btn btn-primary" id="btn-save-user">保存 USER</button>
+          </div>
+        </section>
+
+        <!-- Training -->
+        <section id="training" class="panel">
+          <div class="grid-2">
+            <div class="card train-form">
+              <h4>添加训练样本</h4>
+              <p style="margin-bottom:.85rem">定义「遇到这类问题，Juno 应该这样回答」。</p>
+              <label>问题 / 场景</label>
+              <input type="text" id="train-q" placeholder="例如：介绍你自己" />
+              <label>理想回答</label>
+              <textarea id="train-a" placeholder="你希望 Juno 怎么回答…"></textarea>
+              <label>标签（逗号分隔）</label>
+              <input type="text" id="train-tags" placeholder="intro, style" />
+              <button class="btn btn-primary" id="btn-add-train" style="margin-top:.5rem;width:fit-content">添加样本</button>
+            </div>
+            <div>
+              <h4 style="margin:0 0 .85rem;font-size:.95rem">已有样本</h4>
+              <div class="train-grid" id="train-list"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-panel" id="status-panel">
+    <div class="status-head" id="status-toggle">
+      <span><span class="live-dot" id="status-dot" style="visibility:hidden">●</span>活动日志</span>
+      <div class="status-actions">
+        <button type="button" id="status-clear">Clear</button>
+        <button type="button" id="status-collapse">收起</button>
+      </div>
+    </div>
+    <div class="status-body" id="status-body"><p class="status-line">就绪 · 同步操作会在此显示</p></div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => document.querySelectorAll(s);
+    const TITLES = {
+      dashboard: ['控制台', 'Juno 私人智能体 · 记忆与训练中心'],
+      'chat-guide': ['如何对话', '在 Cursor 里 @my-core-agent 跟 Juno 说话'],
+      conversations: ['对话归档', '从 Cursor 自动同步的聊天记录'],
+      memory: ['长期记忆', '编辑 MEMORY.md'],
+      user: ['用户画像', '编辑 USER.md'],
+      training: ['训练样本', '理想问答对 · examples.jsonl'],
+    };
+    let allConversations = [];
+    const statusLines = [];
+    const MAX_STATUS = 120;
+
+    function logStatus(msg, kind) {
+      const ts = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      statusLines.push({ ts, msg, kind: kind || '' });
+      if (statusLines.length > MAX_STATUS) statusLines.shift();
+      renderStatus();
+      openStatus();
+    }
+    function renderStatus() {
+      const body = $('#status-body');
+      if (!body) return;
+      body.innerHTML = statusLines.map(l =>
+        `<p class="status-line${l.kind ? ' ' + l.kind : ''}">[${l.ts}] ${esc(l.msg)}</p>`
+      ).join('') || '<p class="status-line">就绪</p>';
+      body.scrollTop = body.scrollHeight;
+    }
+    function openStatus() {
+      $('#main')?.classList.add('status-open');
+      const dot = $('#status-dot');
+      if (dot) dot.style.visibility = 'visible';
+    }
+    function closeStatus() {
+      $('#main')?.classList.remove('status-open');
+      const dot = $('#status-dot');
+      if (dot) dot.style.visibility = 'hidden';
+    }
+    function toggleSidebar(open) {
+      const sb = $('#sidebar');
+      const bd = $('#sidebar-backdrop');
+      const on = open ?? !sb?.classList.contains('open');
+      sb?.classList.toggle('open', on);
+      bd?.classList.toggle('show', on);
+    }
+
+    function toast(msg) {
+      const t = $('#toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => t.style.display = 'none', 2600);
+    }
+    async function api(path, opts) {
+      const r = await fetch(path, opts);
+      return r.json();
+    }
+    function fmtTime(iso) {
+      if (!iso) return '从未';
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch { return iso; }
+    }
+    function updateEditorMeta(id, text) {
+      const lines = (text || '').split('\n').length;
+      const chars = (text || '').length;
+      $(id).textContent = `${lines} 行 · ${chars} 字`;
+    }
+    function renderChatBubbles(md) {
+      if (!md) return '<div class="chat-empty">空内容</div>';
+      const parts = md.split(/^## (User|Assistant)\s*$/m);
+      let html = '';
+      for (let i = 1; i < parts.length; i += 2) {
+        const role = parts[i].toLowerCase();
+        const body = (parts[i + 1] || '').trim();
+        if (!body || body.startsWith('# Cursor Chat')) continue;
+        const skip = ['Source', 'Project', 'Synced', '---'].some(k => body.startsWith('**' + k) || body.startsWith('- **'));
+        if (role === 'user' && body.includes('**Source**:')) continue;
+        if (!body) continue;
+        html += `<div class="bubble ${role}"><div class="bubble-label">${role === 'user' ? '你' : 'Juno'}</div>${esc(body)}</div>`;
+      }
+      return html || `<div class="bubble assistant"><div class="bubble-label">原文</div>${esc(md)}</div>`;
+    }
+    function esc(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    async function refreshStatus() {
+      const s = await api('/api/status');
+      $('#stat-conv').textContent = s.conversations;
+      $('#stat-train').textContent = s.training_count;
+      $('#stat-sync').textContent = fmtTime(s.last_sync);
+      $('#stat-conv-big').textContent = s.conversations;
+      $('#stat-train-big').textContent = s.training_count;
+      $('#stat-sync-big').textContent = fmtTime(s.last_sync);
+    }
+    function switchTab(tab) {
+      $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      $$('.panel').forEach(p => p.classList.toggle('active', p.id === tab));
+      const [title, sub] = TITLES[tab] || ['Juno Studio', ''];
+      $('#page-title').textContent = title;
+      $('#page-sub').textContent = sub;
+      toggleSidebar(false);
+    }
+    $$('.nav-btn').forEach(btn => {
+      if (!btn.dataset.tab) return;
+      btn.onclick = () => switchTab(btn.dataset.tab);
+    });
+    $$('[data-goto]').forEach(el => {
+      el.onclick = () => switchTab(el.dataset.goto);
+    });
+    $$('.btn-copy').forEach(btn => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const text = btn.dataset.copy || btn.previousElementSibling?.textContent || '';
+        try {
+          await navigator.clipboard.writeText(text.trim());
+          toast('已复制到剪贴板');
+        } catch { toast('复制失败，请手动复制'); }
+      };
+    });
+
+    $('#btn-sync').onclick = async () => {
+      logStatus('开始同步 Cursor 对话…');
+      toast('同步中…');
+      try {
+        const r = await api('/api/sync', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+        logStatus(`同步完成 · 新增 ${r.new || 0} · 跳过 ${r.skipped || 0}`, 'ok');
+        toast(`完成：新增 ${r.new || 0}，跳过 ${r.skipped || 0}`);
+        refreshStatus();
+        loadConversations();
+      } catch (e) {
+        logStatus('同步失败：' + e.message, 'err');
+        toast('同步失败');
+      }
+    };
+    $('#btn-sync-force').onclick = async () => {
+      logStatus('开始全量同步…');
+      toast('全量同步中…');
+      try {
+        const r = await api('/api/sync', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({force:true}) });
+        logStatus(`全量完成 · 新增 ${r.new || 0}`, 'ok');
+        toast(`完成：新增 ${r.new || 0}`);
+        refreshStatus();
+        loadConversations();
+      } catch (e) {
+        logStatus('全量同步失败：' + e.message, 'err');
+        toast('同步失败');
+      }
+    };
+
+    $('#menu-btn')?.addEventListener('click', () => toggleSidebar());
+    $('#sidebar-backdrop')?.addEventListener('click', () => toggleSidebar(false));
+    $('#status-toggle')?.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      $('#main')?.classList.toggle('status-open');
+    });
+    $('#status-collapse')?.addEventListener('click', e => { e.stopPropagation(); closeStatus(); });
+    $('#status-clear')?.addEventListener('click', e => {
+      e.stopPropagation();
+      statusLines.length = 0;
+      renderStatus();
+    });
+
+    function renderConvList(items) {
+      const list = $('#conv-list');
+      list.innerHTML = '';
+      if (!items.length) {
+        list.innerHTML = '<div class="chat-empty" style="padding:2rem">暂无对话，先在 Cursor 聊几句再同步</div>';
+        return;
+      }
+      items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'list-item';
+        const date = new Date(item.mtime * 1000).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+        div.innerHTML = `<div class="name">${esc(item.name)}</div><div class="meta">${date} · ${Math.round(item.size/1024)} KB</div>`;
+        div.onclick = async () => {
+          list.querySelectorAll('.list-item').forEach(x => x.classList.remove('active'));
+          div.classList.add('active');
+          const c = await api('/api/conversation?path=' + encodeURIComponent(item.path));
+          $('#conv-preview').innerHTML = renderChatBubbles(c.content || '');
+        };
+        list.appendChild(div);
+      });
+    }
+    async function loadConversations() {
+      const r = await api('/api/conversations');
+      allConversations = r.items || [];
+      renderConvList(allConversations);
+    }
+    $('#conv-search').oninput = (e) => {
+      const q = e.target.value.trim().toLowerCase();
+      renderConvList(q ? allConversations.filter(i => i.name.toLowerCase().includes(q)) : allConversations);
+    };
+    $('#btn-refresh-conv').onclick = loadConversations;
+
+    async function loadEditors() {
+      const m = await api('/api/memory');
+      const u = await api('/api/user');
+      $('#memory-editor').value = m.content || '';
+      $('#user-editor').value = u.content || '';
+      updateEditorMeta('#memory-meta', m.content);
+      updateEditorMeta('#user-meta', u.content);
+    }
+    $('#memory-editor').oninput = (e) => updateEditorMeta('#memory-meta', e.target.value);
+    $('#user-editor').oninput = (e) => updateEditorMeta('#user-meta', e.target.value);
+    $('#btn-save-memory').onclick = async () => {
+      await api('/api/memory', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content: $('#memory-editor').value}) });
+      logStatus('MEMORY.md 已保存', 'ok');
+      toast('MEMORY 已保存');
+    };
+    $('#btn-save-user').onclick = async () => {
+      await api('/api/user', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({content: $('#user-editor').value}) });
+      logStatus('USER.md 已保存', 'ok');
+      toast('USER 已保存');
+    };
+
+    async function loadTraining() {
+      const r = await api('/api/training');
+      const box = $('#train-list');
+      box.innerHTML = '';
+      if (!r.items.length) {
+        box.innerHTML = '<div class="card"><p>还没有样本。左侧添加第一条吧。</p></div>';
+        return;
+      }
+      r.items.forEach((item, i) => {
+        const card = document.createElement('div');
+        card.className = 'train-card';
+        const tags = (item.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+        card.innerHTML = `<div class="q">Q: ${esc(item.question)}</div><div class="a">${esc(item.answer)}</div>${tags ? `<div class="tags">${tags}</div>` : ''}`;
+        const del = document.createElement('button');
+        del.className = 'btn btn-ghost btn-sm';
+        del.textContent = '删除';
+        del.onclick = async () => {
+          await api('/api/training/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({index:i}) });
+          loadTraining();
+          refreshStatus();
+        };
+        card.appendChild(del);
+        box.appendChild(card);
+      });
+    }
+    $('#btn-add-train').onclick = async () => {
+      const question = $('#train-q').value.trim();
+      const answer = $('#train-a').value.trim();
+      if (!question || !answer) { toast('请填写问题和回答'); return; }
+      const tags = $('#train-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+      await api('/api/training/add', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ question, answer, tags, created: new Date().toISOString() })
+      });
+      $('#train-q').value = ''; $('#train-a').value = ''; $('#train-tags').value = '';
+      toast('样本已添加');
+      loadTraining();
+      refreshStatus();
+    };
+
+    refreshStatus();
+    loadEditors();
+    loadConversations();
+    loadTraining();
+    logStatus('Juno Studio 已加载');
+  </script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+{
+  "agentName": "Juno",
+  "agentNameZh": "朱诺",
+  "owner": "李俊呈",
+  "ownerEn": "Li Juncheng",
+  "version": "0.4.0",
+  "headquarters": "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
+  "defaultLanguage": "zh-CN",
+  "skills": {
+    "core": "my-core-agent",
+    "chat": "agent-chat",
+    "research": "agent-research",
+    "writing": "agent-writing",
+    "coding": "agent-coding",
+    "memory": "agent-memory"
+  },
+  "knowledgeDir": "knowledge",
+  "memoryFiles": {
+    "longTerm": "MEMORY.md",
+    "daily": "memory/daily"
+  },
+  "index": {
+    "enabled": true,
+    "topK": 10,
+    "chunkChars": 900,
+    "hybridEmbed": true,
+    "hybridAlpha": 0.45,
+    "embedModel": "nomic-embed-text:latest",
+    "embedApiBase": "http://127.0.0.1:11434",
+    "roots": [
+      {
+        "id": "juno-hq",
+        "path": "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
+        "label": "Juno 总部"
+      },
+      {
+        "id": "totoro",
+        "path": "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise",
+        "label": "龙猫跑项目"
+      },
+      {
+        "id": "desktop",
+        "path": "C:\\Users\\solut xc\\Desktop",
+        "label": "Desktop（broad read）"
+      },
+      {
+        "id": "cursor-config",
+        "path": "C:\\Users\\solut xc\\.cursor",
+        "label": "Cursor 配置"
+      }
+    ],
+    "extraPaths": [
+      "knowledge/conversations/auto"
+    ],
+    "ignoreDirs": [
+      ".git",
+      "node_modules",
+      ".next",
+      "dist",
+      "build",
+      "__pycache__",
+      ".cursor",
+      "mcps",
+      "assets"
+    ],
+    "ignoreExtensions": [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".webp",
+      ".ico",
+      ".zip",
+      ".exe",
+      ".dll",
+      ".woff",
+      ".woff2",
+      ".mp4",
+      ".mp3",
+      ".jsonl"
+    ],
+    "maxFileBytes": 524288
+  },
+  "tools": {
+    "enabled": true,
+    "maxSteps": 24,
+    "maxSubagents": 2,
+    "readPolicy": "unrestricted",
+    "broadReadRoots": [
+      "C:\\",
+      "D:\\",
+      "C:\\Users\\solut xc",
+      "C:\\Users\\solut xc\\Desktop",
+      "C:\\Users\\solut xc\\.cursor",
+      "D:\\CloudMusic",
+      "D:\\LeStoreDownload"
+    ],
+    "roots": [
+      "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
+      "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise",
+      "C:\\Users\\solut xc\\Desktop",
+      "C:\\Users\\solut xc\\.cursor"
+    ],
+    "shellAllowlist": [
+      "git status",
+      "git diff",
+      "git log",
+      "git add",
+      "git commit",
+      "npm ",
+      "npm test",
+      "npm run",
+      "npm start",
+      "npm install",
+      "pnpm ",
+      "pnpm run",
+      "pnpm test",
+      "pnpm install",
+      "pnpm dev",
+      "pnpm exec",
+      "node ",
+      "npx ",
+      "python ",
+      "python -m pytest",
+      "python -m ",
+      "python scripts/",
+      "python makeup-backend/",
+      "pytest",
+      "pip ",
+      "pip install",
+      "curl ",
+      "curl.exe ",
+      "dir ",
+      "ls ",
+      "type ",
+      "tree ",
+      "findstr ",
+      "where ",
+      "netstat ",
+      "tasklist",
+      "echo ",
+      "Get-Content",
+      "Select-String",
+      "powershell ",
+      "pwsh ",
+      "cmd /c",
+      "bash ",
+      "sh ",
+      "make ",
+      "ruff check",
+      "start ",
+      ".\\",
+      "cd "
+    ],
+    "writeRoots": [
+      "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
+      "C:\\Users\\solut xc\\Desktop\\my-ai-agent\\memory",
+      "C:\\Users\\solut xc\\Desktop\\my-ai-agent\\knowledge",
+      "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise"
+    ],
+    "webSearch": {
+      "enabled": true,
+      "provider": "duckduckgo"
+    }
+  }
+}

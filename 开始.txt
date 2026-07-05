@@ -1,0 +1,10 @@
+# 开始
+
+1. 打开 **Cursor** → 文件 → 打开文件夹 → 选 `Desktop\my-ai-agent`
+2. 改 **USER.md**、**SOUL.md**（给 AI 起名）
+3. 读 **BOOTSTRAP.md** 做第一次试跑
+4. **双击桌面「Juno」** 或 `scripts\启动Juno.bat` → 独立聊天
+5. 任何项目里都可 `@my-core-agent`（写代码时用 Cursor）
+6. 双击 `scripts\启动训练台.bat` → 训练界面
+
+总部路径：`C:\Users\solut xc\Desktop\my-ai-agent`
