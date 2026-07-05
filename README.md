@@ -3,7 +3,7 @@
 > **Beta (v0.1.0)** — Early preview. APIs, prompts, and UI may change without notice.  
 > Use at your own discretion; [report issues](https://github.com/lij88079-jpg/juno-agent/issues) on GitHub.
 
-**Juno**（朱诺）is a **personal AI headquarters** — not just a chatbot. Identity, memory, rules, skills, knowledge, and a Cursor-style web UI live in **one folder** you own. Swap models (local Ollama or cloud API), keep your data on disk, and extend behavior without retraining model weights.
+**Juno** is a **personal AI headquarters** — not just a chatbot. Identity, memory, rules, skills, knowledge, and a Cursor-style web UI live in **one folder** you own. Swap models (local Ollama or cloud API), keep your data on disk, and extend behavior without retraining model weights.
 
 ---
 
@@ -14,7 +14,7 @@
 | **Web Chat** (`/chat`) | Cursor-like UI: history sidebar, drag-and-drop files, @mentions, integrated terminal, mode switcher |
 | **Studio** (`/studio`) | Edit MEMORY / USER, view synced conversations, add style training examples |
 | **Brain** (`juno_brain.py`) | System prompt, per-turn **intent understanding**, tone guard, session memory |
-| **Orchestrator** (`juno_orchestrator.py`) | Intent routing, prefetch, tool policy (Auto-lite) |
+| **Orchestrator** (`juno_orchestrator.py`) | Intent routing, prefetch, tool policy (Cursor Auto–lite) |
 | **Agent** (`juno_agent.py`) | Multi-step tool loop: read / grep / search / shell / write (sandboxed) |
 | **Cursor skills** (`.cursor/skills/`) | `@my-core-agent`, `@agent-coding`, `@agent-research`, etc. |
 
@@ -24,28 +24,27 @@
 |------|------|--------|
 | **Chat** | ○ | Talk only — no file or shell access |
 | **Agent** | ∞ | Read/write files, run whitelisted shell, MCP tools |
-| **Plan** | ◈ | Plan steps only — no write/shell/git |
+| **Plan** | ◈ | Plan steps only — no write / shell / git |
 | **Ask** | 👁 | Read-only: search, read, grep, web |
 
-### Intent understanding (Beta highlight)
+### Intent understanding
 
-Every user message goes through **`analyze_user_turn`**: literal text → turn type (new task / continuation / feedback / command / holistic design…) → goal → what to reply. Short replies like “呵呵” or “继续” are treated as **responses to the previous turn**, not fresh small talk. See `knowledge/juno-workflow.md` and `scripts/juno_brain.py`.
+Every user message goes through **`analyze_user_turn`**: literal text → turn type (new task / continuation / feedback / command / holistic design…) → user goal → how to respond. Short replies (e.g. “ok”, “continue”, skeptical one-liners) are treated as **reactions to the previous turn**, not brand-new small talk. See `knowledge/juno-workflow.md` and `scripts/juno_brain.py`.
 
 ---
 
 ## Install from GitHub
 
-**Requirements:** Python 3.10+, optional [Ollama](https://ollama.com/download) for fully local mode.
+**Requirements:** Python 3.10+. Optional: [Ollama](https://ollama.com/download) for fully local mode.
 
 ```bash
 git clone https://github.com/lij88079-jpg/juno-agent.git
 cd juno-agent
 
-# API config (cloud mode) — copy example and add your key
+# Cloud API — copy example and add your key
 copy config\chat.local.json.example config\chat.local.json   # Windows
-# cp config/chat.local.json.example config/chat.local.json  # macOS/Linux
+# cp config/chat.local.json.example config/chat.local.json  # macOS / Linux
 
-# Start server
 python scripts/juno_training_server.py
 ```
 
@@ -54,10 +53,17 @@ Open in browser:
 - **Chat:** http://127.0.0.1:8765/chat  
 - **Studio:** http://127.0.0.1:8765/studio  
 
-Or double-click `scripts\启动训练台.bat` (Windows).
+Windows shortcuts (same server):
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/启动训练台.bat` | Start server + open Studio |
+| `scripts/打开Juno对话.bat` | Start server + open Chat |
+| `scripts/启动Juno.bat` | Local Ollama setup + chat |
+| `scripts/安装Juno环境.bat` | First-time dependency install |
 
 > **Beta** — Back up `USER.md`, `MEMORY.md`, and `config/chat.local.json` before upgrading.  
-> **Never commit** `chat.local.json` or chat sessions — they are in `.gitignore`.
+> **Never commit** API keys or chat sessions — they are listed in `.gitignore`.
 
 ### API setup (`config/chat.local.json`)
 
@@ -65,71 +71,83 @@ Or double-click `scripts\启动训练台.bat` (Windows).
 |-------|---------|--------|
 | `provider` | `openai_compatible` or `ollama` | Cloud vs local |
 | `api_base` | `https://api.deepseek.com` | OpenAI-compatible endpoint |
-| `model` | `deepseek-chat` | Model id for your provider |
+| `model` | `deepseek-chat` | Model ID for your provider |
 | `api_key` | `sk-...` | Required for cloud; omit for Ollama |
 
-First run: use **⚙ Model settings** in `/chat`, or edit `chat.local.json` directly.
+On first run, use **Model settings** in `/chat`, or edit `chat.local.json` directly.
 
 ---
 
-## Three ways to use Juno
+## Quick start (Cursor)
 
-### 1. Cursor (best for coding)
+Best when you want Juno inside your IDE for coding tasks.
 
-1. Open this folder in **Cursor** (`File → Open Folder → juno-agent`)
-2. Edit **`USER.md`** (who you are) and **`SOUL.md`** (AI persona)
-3. New chat → type **`@my-core-agent`** and describe the task
-4. Put reference docs in **`knowledge/`**; @ files in chat when needed
+1. Open this repo in **Cursor** (`File → Open Folder → juno-agent`).
+2. Edit **`USER.md`** — who you are, language preference, boundaries.  
+   Edit **`SOUL.md`** — Juno’s name, tone, and how it should behave.
+3. Start a **new chat**, type **`@my-core-agent`**, and describe what you need.  
+   Juno routes to chat / research / writing / coding / memory skills as appropriate.
+4. Drop reference material into **`knowledge/`** (PDFs, notes, exports). Mention or @ files in chat when relevant.
 
-Cursor Agent sessions can auto-sync to `knowledge/conversations/auto/` via hooks (see Studio).
+**Tip:** `@agent-coding` for code changes, `@agent-research` for lookup, `@agent-memory` to summarize chats into MEMORY.
 
-### 2. Web UI (best for daily chat + Agent on any machine)
+---
 
-1. Start server (see above)
-2. **Ctrl+Shift+R** hard refresh after updates
-3. Drag files/folders into the composer (path pills like Cursor)
-4. Use **∞ Agent** when Juno should read code or run commands in the integrated terminal
+## Standalone — no Cursor, no cloud API
 
-Conversations persist under `memory/chat-sessions/` (local only, not in git).
+Run entirely on your machine with **Ollama** as the LLM backend. No API key required.
 
-### 3. Fully local — no cloud API (`独立存在`)
-
-1. Install **Ollama**
-2. Double-click **`scripts\启动Juno.bat`** — pulls default model (`qwen2.5:7b`) and opens chat
-3. Details: **`独立存在.txt`**
+1. Install [Ollama](https://ollama.com/download).
+2. Double-click **`scripts/启动Juno.bat`** (or run it from a terminal).  
+   It pulls the default model (`qwen2.5:7b`) if missing and opens the chat UI.
+3. Read **`独立存在.txt`** (standalone setup guide, Chinese) for troubleshooting.
 
 | Component | Role |
 |-----------|------|
-| **Ollama** | Local LLM |
-| **Juno server** | Loads SOUL / USER / MEMORY / workflow injects |
-| **Chat UI** | Browser at `:8765/chat` |
+| **Ollama** | Local LLM runtime |
+| **Juno server** | Injects SOUL, USER, MEMORY, workflow, and skills into each reply |
+| **Chat UI** | Browser at `http://127.0.0.1:8765/chat` |
 
-Copy the whole folder to another PC — identity and memory travel with it.
+Your identity and memory live in this folder — copy the whole directory to another PC to migrate.
 
 ---
 
-## Studio & memory (not model fine-tuning)
+## Standalone chat window (cloud API optional)
 
-Juno learns via **files**, not weight training:
+Use the web UI with **DeepSeek**, **OpenAI-compatible**, or other cloud endpoints for stronger models.
 
-| Mechanism | Location | Purpose |
-|-----------|----------|---------|
-| Long-term memory | `MEMORY.md` | Facts, preferences, project notes |
-| Daily log | `memory/daily/` | Raw session notes |
-| Style examples | `training/examples.jsonl` | “Question → ideal answer” pairs |
-| Auto-sync chats | `knowledge/conversations/auto/` | Cursor / web chat archive |
-| Code index | `config/index/` (local) | Semantic search for Agent |
+1. Double-click **`scripts/打开Juno对话.bat`**, or run `python scripts/juno_training_server.py`.
+2. Open **http://127.0.0.1:8765/chat**.
+3. First time: open **Model settings**, pick a preset or paste your API key.  
+   Keys are stored in `config/chat.local.json` (gitignored).
+4. Juno reads **SOUL / USER / MEMORY / training examples** on every turn.  
+   Replies follow your persona files, not a generic assistant script.
+5. History is saved under **`memory/chat-sessions/`** (local only, not pushed to GitHub).
 
-**Studio actions**
+**Agent mode:** switch to **∞ Agent** at the bottom to let Juno read files, edit code in allowed roots, and run whitelisted shell commands in the built-in terminal (no extra CMD windows).
+
+---
+
+## Auto-sync Cursor chats + Studio
+
+Stop copy-pasting logs. With Cursor hooks configured, each Agent session can sync into **`knowledge/conversations/auto/`**.
 
 | Action | How |
 |--------|-----|
-| Open Studio | http://127.0.0.1:8765/studio or `scripts\启动训练台.bat` |
-| Sync Cursor chats | Studio → **Sync now**, or `python scripts/sync_cursor_chats.py` |
-| Full rescan | `python scripts/sync_cursor_chats.py --force` |
-| Summarize into MEMORY | In Cursor: `@agent-memory summarize latest in conversations/auto` |
+| **Open Studio** | http://127.0.0.1:8765/studio or `scripts/启动训练台.bat` |
+| **Open Chat** | http://127.0.0.1:8765/chat |
+| **Sync now** | Studio → **Sync now**, or `python scripts/sync_cursor_chats.py` |
+| **Full rescan** | `python scripts/sync_cursor_chats.py --force` |
+| **Digest into MEMORY** | In Cursor: `@agent-memory summarize the latest files in conversations/auto` |
 
-Pipeline after each chat: `juno_sync_pipeline.py` (background sync + optional auto-learn).
+**What Studio is for**
+
+- Browse synced Cursor and web conversations  
+- Edit **`MEMORY.md`** and **`USER.md`** in the browser  
+- Add **style examples** to `training/examples.jsonl` (question → ideal answer)  
+- Trigger manual sync and view sync status  
+
+After each web chat, **`juno_sync_pipeline.py`** runs in the background (archive + optional auto-learn). This is **memory-style learning** (RAG + MEMORY + examples), **not** fine-tuning model weights.
 
 ---
 
@@ -138,7 +156,7 @@ Pipeline after each chat: `juno_sync_pipeline.py` (background sync + optional au
 ```
 juno-agent/
 ├── USER.md                 # Your profile — edit first
-├── SOUL.md                 # Juno persona & tone rules
+├── SOUL.md                 # Juno persona and tone rules
 ├── MEMORY.md               # Long-term memory (curated)
 ├── AGENTS.md               # Agent runtime protocol
 ├── VERSION                 # 0.1.0-beta
@@ -160,7 +178,7 @@ juno-agent/
 │   ├── examples.jsonl      # Style training samples
 │   └── cursor-*.js         # Terminal, explorer, @mentions, drag-drop
 ├── scripts/
-│   ├── juno_training_server.py  # HTTP server :8765
+│   ├── juno_training_server.py  # HTTP server on :8765
 │   ├── juno_brain.py       # Prompts, intent, streaming
 │   ├── juno_orchestrator.py
 │   ├── juno_agent.py       # Tool agent loop
@@ -172,6 +190,12 @@ juno-agent/
 
 ---
 
+## Use Juno from other projects
+
+A global copy of the core skill may live at `~/.cursor/skills/my-core-agent/`. From any workspace you can **`@my-core-agent`**; point Juno at this repo’s `USER.md` / `MEMORY.md` or work inside the juno-agent folder for full context.
+
+---
+
 ## Extend Juno
 
 | Goal | How |
@@ -180,25 +204,23 @@ juno-agent/
 | New rule | Add `.cursor/rules/your-rule.mdc` |
 | New knowledge | Drop files in `knowledge/` or attach in `/chat` |
 | Change personality | Edit `SOUL.md` |
-| Change tool allowlist | Edit `config/agent-profile.json` |
-| Workflow / orchestration copy | Edit `knowledge/juno-workflow.md`, `knowledge/auto-orchestration.md` |
-
-Global copy of core skill (optional): `~/.cursor/skills/my-core-agent/` — use `@my-core-agent` from other repos.
+| Tool allowlist / read roots | Edit `config/agent-profile.json` |
+| Workflow / orchestration text | Edit `knowledge/juno-workflow.md`, `knowledge/auto-orchestration.md` |
 
 ---
 
 ## First-time setup
 
-1. Read **`BOOTSTRAP.md`** if present — one-time initialization checklist  
-2. Fill in **`USER.md`**  
-3. Set API key or install Ollama  
-4. Start server → open `/chat` → say hello  
+1. Read **`BOOTSTRAP.md`** if present — one-time checklist.  
+2. Fill in **`USER.md`**.  
+3. Set an API key **or** install Ollama for local mode.  
+4. Start the server → open `/chat` → say hello.  
 
-Delete `BOOTSTRAP.md` after setup if you like.
+You can delete `BOOTSTRAP.md` after setup.
 
 ---
 
-## License & status
+## Status
 
-**Beta** — personal project, API surface unstable.  
-Issues and ideas: https://github.com/lij88079-jpg/juno-agent/issues
+**Beta** — personal project; APIs and UX may change.  
+Feedback: https://github.com/lij88079-jpg/juno-agent/issues
