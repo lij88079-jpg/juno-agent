@@ -19,6 +19,7 @@ WORKFLOW = HQ / "knowledge" / "juno-workflow.md"
 THINKING = HQ / "knowledge" / "juno-thinking-design.md"
 BRAIN_CHAIN = HQ / "knowledge" / "cursor-brain-chain.md"
 CAPABILITIES = HQ / "knowledge" / "juno-capabilities.md"
+CORE_INSTINCT = HQ / "knowledge" / "juno-core-instinct.md"
 CHAT_CFG = HQ / "config" / "chat.json"
 CHAT_LOCAL = HQ / "config" / "chat.local.json"
 PROFILE = HQ / "config" / "agent-profile.json"
@@ -257,6 +258,29 @@ def load_thinking_inject(mode: str = "chat") -> str:
     start, end = f"<!-- INJECT:{tag} -->", f"<!-- END:{tag} -->"
     if start not in text or end not in text:
         return fallback
+    block = text.split(start, 1)[1].split(end, 1)[0].strip()
+    return block or fallback
+
+
+def load_core_instinct_inject(mode: str = "chat", *, compact: bool = False) -> str:
+    """First-person ingrained identity — not a rulebook to look up."""
+    if compact:
+        tag = "compact"
+    else:
+        tag = "agent" if mode == "agent" else "chat"
+    fallback = (
+        "## 我的本能\n"
+        "我是 Juno，CIFS-EME Lee 开发的私人助手。中文先结论。"
+        "thinking 禁止提 SOUL/规则/文档。"
+    )
+    if not CORE_INSTINCT.exists():
+        return fallback
+    text = read_text(CORE_INSTINCT)
+    start, end = f"<!-- INJECT:{tag} -->", f"<!-- END:{tag} -->"
+    if start not in text or end not in text:
+        if compact:
+            return fallback
+        return load_core_instinct_inject(mode, compact=True)
     block = text.split(start, 1)[1].split(end, 1)[0].strip()
     return block or fallback
 
@@ -725,25 +749,11 @@ def scene_directive(
             "若预读结果说「不在沙箱」，如实说明可读根目录。"
         )
     if is_creator_question(user_message):
-        parts.append(
-            "## 本轮：创造者/来源\n"
-            "用户在问谁做了 Juno。**固定口径**：我是 Juno，由 **CIFS-EME Lee** 开发。\n"
-            "1～3 句即可；**禁止**展开 Python/Flask/Ollama、脚本路径、仓库结构。"
-        )
+        parts.append("## 本轮信号\n问创造者 → 直接答，一两句，不展开技术。")
     elif is_juno_internals_question(user_message):
-        parts.append(
-            "## 本轮：Juno 自身技术（公开口径）\n"
-            "用户在问 Juno 产品本身的技术。**禁止**直说内部栈、config 路径、脚本文件名。\n"
-            "产品层：个人 AI 助手，带记忆与规则，对接部署者配置的大模型。\n"
-            "追问细节 → 建议看 README 或联系 CIFS-EME Lee。"
-        )
+        parts.append("## 本轮信号\n问 Juno 自身技术 → 产品层一句，不展开内部栈。")
     if is_model_identity_question(user_message):
-        parts.append(
-            "## 本轮：模型身份\n"
-            "用户在问 Juno 与模型的关系。**公开口径**：Juno 是助手产品名，不是 model id。\n"
-            "可说「对接你配置的大模型引擎，具体型号在模型设置里」。\n"
-            "**禁止**报 qwen/deepseek/Ollama 等具体型号，**禁止**引用 MEMORY 旧描述或 system 运行时块里的 engine 细节。"
-        )
+        parts.append("## 本轮信号\n问模型身份 → Juno 是名字，不是 model id。")
     if is_mode_question(user_message):
         name = {"chat": "Chat", "agent": "Agent", "plan": "Plan", "ask": "Ask"}.get(ui_mode, "Chat")
         parts.append(
@@ -912,6 +922,7 @@ def build_system_prompt(*, mode: str = "chat") -> str:
     import juno_skills
 
     protocol = juno_skills.build_workspace_protocol(compact=compact, mode=mode)
+    instinct = load_core_instinct_inject(mode, compact=compact)
     soul_block = _clip(read_text(SOUL), 800) if compact else read_text(SOUL)
     user_block = _clip(read_text(USER), 600) if compact else read_text(USER)
     memory_block = _clip(read_text(MEMORY), 2000) if compact else read_text(MEMORY)
@@ -924,26 +935,26 @@ def build_system_prompt(*, mode: str = "chat") -> str:
         )
         return f"""你是 **Juno**，{owner} 的私人 AI 助手。
 
+{instinct}
+
 {runtime}
 
-## 身份（SOUL 摘要）
+## 性格与边界（背景）
 {soul_block}
 
-## 用户（USER 摘要）
+## 用户偏好（背景）
 {user_block}
 
-## 记忆（MEMORY 摘要）
+## 长期记忆（背景）
 {memory_block}
 
 {train_block}
 
-## 听说读写（核心 · 最高优先级）
+## 听说读写
 {caps}
 {agent_note}
 
 {protocol}
-
-- 中文；称呼见 USER.md（默认「你」）；先结论；不确定就说不知道
 """
 
     workflow = load_workflow_inject(mode)
@@ -957,15 +968,17 @@ def build_system_prompt(*, mode: str = "chat") -> str:
 
     return f"""你是 **Juno**（朱诺），{owner} 的私人 AI 助手。
 
+{instinct}
+
 {runtime}
 
-## 身份与人设（SOUL.md）
+## 性格与边界（背景，非每轮查阅手册）
 {soul_block}
 
-## 用户画像（USER.md）
+## 用户偏好（背景）
 {user_block}
 
-## 长期记忆（MEMORY.md）
+## 长期记忆（背景）
 {memory_block}
 
 {train_block}
@@ -984,19 +997,17 @@ def build_system_prompt(*, mode: str = "chat") -> str:
 
 ## 对话体感
 - 中文；称呼见 USER.md（默认「你」）；先结论；长度匹配问题；一轮一事
-- **对外身份**：谁创造的你 → CIFS-EME Lee；Juno 自身技术 → 产品层，不直说内部栈
 {agent_note}
 
-## 场景规则
+## 场景习惯
 - 先听懂再答：结合最近对话判断是任务、追问、不满还是寒暄
 - 用户纠正范围（「只是个例」）→ 改整体能力，不只修单个词
 - 不确定就追问一句，别猜错方向
-- 「记住 xxx」→ 确认 MEMORY 沉淀
 
 ## 输出格式（强制）
 - 口语化中文，像靠谱朋友聊天，不像文档/客服/教程
 - **禁止** Markdown 表格（|）、【结论】类标题、堆砌 ** 加粗
-- 分点用短句或 1. 2. 3.，一行一事；能力清单也用列表，不用表格
+- 分点用短句或 1. 2. 3.，一行一事
 - 只有代码块用 ``` fenced block
 """
 
