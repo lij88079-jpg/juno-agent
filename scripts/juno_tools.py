@@ -43,12 +43,23 @@ def load_profile() -> dict:
     return {}
 
 
+def resolve_profile_path(raw: str) -> Path:
+    """Resolve agent-profile path entries relative to Juno HQ."""
+    text = (raw or "").strip()
+    if not text or text in {".", "./", "__HQ__"}:
+        return HQ.resolve()
+    p = Path(text)
+    if not p.is_absolute():
+        return (HQ / p).resolve()
+    return p.resolve()
+
+
 def _tool_roots() -> list[Path]:
     cfg = load_profile()
-    roots = (cfg.get("tools") or {}).get("roots") or [str(HQ)]
+    roots = (cfg.get("tools") or {}).get("roots") or ["."]
     out: list[Path] = []
     for r in roots:
-        p = Path(r).resolve()
+        p = resolve_profile_path(str(r))
         if p.exists():
             out.append(p)
     return out or [HQ.resolve()]
@@ -57,15 +68,13 @@ def _tool_roots() -> list[Path]:
 def _broad_read_roots() -> list[Path]:
     cfg = load_profile()
     tools = cfg.get("tools") or {}
-    raw = tools.get("broadReadRoots") or [
-        str(Path.home()),
-        str(Path.home() / "Desktop"),
-        r"D:\LeStoreDownload",
-    ]
+    raw = tools.get("broadReadRoots") or []
+    if not raw:
+        raw = [str(Path.home()), str(Path.home() / "Desktop")]
     out: list[Path] = []
     for r in raw:
         try:
-            p = Path(r).resolve()
+            p = resolve_profile_path(str(r)) if str(r).strip() in {".", "./", "__HQ__"} else Path(r).expanduser().resolve()
             if p.exists():
                 out.append(p)
         except OSError:
@@ -143,7 +152,10 @@ def _read_roots() -> list[Path]:
 def tool_roots_labeled() -> list[dict]:
     """Readable roots with labels from agent-profile index config."""
     cfg = load_profile()
-    index_roots = {Path(r["path"]).resolve(): r.get("label") or r.get("id") for r in (cfg.get("index") or {}).get("roots") or []}
+    index_roots = {
+        resolve_profile_path(str(r["path"])): r.get("label") or r.get("id")
+        for r in (cfg.get("index") or {}).get("roots") or []
+    }
     items: list[dict] = []
     if _is_unrestricted_read():
         for p in _drive_roots():
@@ -163,7 +175,7 @@ def format_tool_roots_block() -> str:
     if policy == "unrestricted":
         lines.append("- **unrestricted 模式**：可读本机所有盘符下文件（仅屏蔽 Windows/Program Files 等系统目录）")
     elif policy == "broad":
-        lines.append("- **broad 模式**：用户目录 + 项目根 + Desktop + D:\\LeStoreDownload（屏蔽 Windows/Program Files/大二进制）")
+        lines.append("- **broad 模式**：用户目录 + Desktop + tools.roots（屏蔽 Windows/Program Files/大二进制）")
     else:
         lines.append("- **sandbox 模式**：仅限 tools.roots")
     for it in items[:12]:
@@ -930,11 +942,7 @@ def _write_roots() -> list[Path]:
     raw = (cfg.get("tools") or {}).get("writeRoots") or ["memory", "knowledge"]
     out: list[Path] = []
     for r in raw:
-        p = Path(r)
-        if not p.is_absolute():
-            p = (HQ / r).resolve()
-        else:
-            p = p.resolve()
+        p = resolve_profile_path(str(r))
         p.mkdir(parents=True, exist_ok=True)
         out.append(p)
     return out or [(HQ / "memory").resolve(), (HQ / "knowledge").resolve()]

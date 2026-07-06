@@ -1,10 +1,10 @@
 {
   "agentName": "Juno",
   "agentNameZh": "朱诺",
-  "owner": "李俊呈",
-  "ownerEn": "Li Juncheng",
+  "owner": "",
+  "ownerEn": "",
   "version": "0.4.0",
-  "headquarters": "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
+  "headquarters": ".",
   "defaultLanguage": "zh-CN",
   "skills": {
     "core": "my-core-agent",
@@ -30,23 +30,8 @@
     "roots": [
       {
         "id": "juno-hq",
-        "path": "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
+        "path": ".",
         "label": "Juno 总部"
-      },
-      {
-        "id": "totoro",
-        "path": "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise",
-        "label": "龙猫跑项目"
-      },
-      {
-        "id": "desktop",
-        "path": "C:\\Users\\solut xc\\Desktop",
-        "label": "Desktop（broad read）"
-      },
-      {
-        "id": "cursor-config",
-        "path": "C:\\Users\\solut xc\\.cursor",
-        "label": "Cursor 配置"
       }
     ],
     "extraPaths": [
@@ -85,21 +70,10 @@
     "enabled": true,
     "maxSteps": 24,
     "maxSubagents": 2,
-    "readPolicy": "unrestricted",
-    "broadReadRoots": [
-      "C:\\",
-      "D:\\",
-      "C:\\Users\\solut xc",
-      "C:\\Users\\solut xc\\Desktop",
-      "C:\\Users\\solut xc\\.cursor",
-      "D:\\CloudMusic",
-      "D:\\LeStoreDownload"
-    ],
+    "readPolicy": "sandbox",
+    "broadReadRoots": [],
     "roots": [
-      "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
-      "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise",
-      "C:\\Users\\solut xc\\Desktop",
-      "C:\\Users\\solut xc\\.cursor"
+      "."
     ],
     "shellAllowlist": [
       "git status",
@@ -124,7 +98,6 @@
       "python -m pytest",
       "python -m ",
       "python scripts/",
-      "python makeup-backend/",
       "pytest",
       "pip ",
       "pip install",
@@ -153,10 +126,9 @@
       "cd "
     ],
     "writeRoots": [
-      "C:\\Users\\solut xc\\Desktop\\my-ai-agent",
-      "C:\\Users\\solut xc\\Desktop\\my-ai-agent\\memory",
-      "C:\\Users\\solut xc\\Desktop\\my-ai-agent\\knowledge",
-      "D:\\LeStoreDownload\\totoro-paradise-backup\\totoro-paradise"
+      ".",
+      "memory",
+      "knowledge"
     ],
     "webSearch": {
       "enabled": true,

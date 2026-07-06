@@ -7,7 +7,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob
 
 # Agent Memory · 从对话中学习
 
-You help **Juno** learn from **saved conversation logs** (not live training). Headquarters: `C:\Users\solut xc\Desktop\my-ai-agent`
+You help **Juno** learn from **saved conversation logs** (not live training). Headquarters: Juno repo root (`./`)
 
 ## Input sources
 

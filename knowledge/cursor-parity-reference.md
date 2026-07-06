@@ -62,7 +62,7 @@ Agent 编排层（规划 → 选工具 → 观察结果 → 再规划）
 ### Juno 已实现（Phase 1）
 - `config/agent-profile.json` → `index.roots`
 - `scripts/juno_index.py` → TF-IDF 切块 + 检索
-- 配置根：`my-ai-agent` + `totoro-paradise`
+- 配置根：Juno 总部（`config/agent-profile.json` → `index.roots`）
 - API：`GET /api/index/status`、`GET /api/index/search?q=`、`POST /api/index/rebuild`
 
 ### Juno Phase 2 目标

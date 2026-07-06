@@ -112,7 +112,7 @@ def learn_from_session(session_id: str) -> dict:
 
     result = {"ok": True, "session_id": session_id, "daily": False, "memory": False, "training": False}
 
-    append_daily(f"[{title}] 俊呈：{_clip(u)} → Juno：{_clip(a)}")
+    append_daily(f"[{title}] 用户：{_clip(u)} → Juno：{_clip(a)}")
     result["daily"] = True
 
     if REMEMBER_RE.search(u):

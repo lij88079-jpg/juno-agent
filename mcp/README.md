@@ -6,10 +6,13 @@
 {
   "juno": {
     "command": "python",
-    "args": ["C:\\Users\\solut xc\\Desktop\\my-ai-agent\\mcp\\juno_server.py"]
+    "args": ["mcp/juno_server.py"],
+    "cwd": "/path/to/juno-agent"
   }
 }
 ```
+
+将 `cwd` 改为本仓库根目录的绝对路径。
 
 ## Tools
 

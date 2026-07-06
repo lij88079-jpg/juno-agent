@@ -1,0 +1,16 @@
+{
+  "owner": "（本地填写，勿提交）",
+  "ownerEn": "",
+  "headquarters": ".",
+  "index": {
+    "roots": [
+      { "id": "juno-hq", "path": ".", "label": "Juno 总部" },
+      { "id": "my-project", "path": "../your-other-project", "label": "其他项目（示例）" }
+    ]
+  },
+  "tools": {
+    "readPolicy": "sandbox",
+    "roots": [".", "../your-other-project"],
+    "writeRoots": [".", "memory", "knowledge"]
+  }
+}

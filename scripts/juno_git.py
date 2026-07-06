@@ -29,10 +29,7 @@ def git_workflow(action: str, *, message: str = "", paths: list[str] | None = No
     action = (action or "status").strip().lower()
     work = Path(cwd).resolve() if cwd else HQ
     if not (work / ".git").exists():
-        for root in [HQ, Path("D:/LeStoreDownload/totoro-paradise-backup/totoro-paradise")]:
-            if (root / ".git").exists():
-                work = root.resolve()
-                break
+        work = HQ
 
     if action == "status":
         return _run(["git", "status", "--short"], cwd=work)

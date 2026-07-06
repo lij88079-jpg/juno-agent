@@ -33,7 +33,7 @@
 ```
 
 ```
-用户：「D:\...\totoro-paradise\makeup-backend\src\app.ts 报什么错」
+用户：「某项目路径下的 app.ts 报什么错」
 → read_file(完整路径) 或 grep("error", path)
 → 【结论】【依据】【做法】
 ```

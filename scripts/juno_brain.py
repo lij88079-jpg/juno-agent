@@ -21,6 +21,7 @@ BRAIN_CHAIN = HQ / "knowledge" / "cursor-brain-chain.md"
 CAPABILITIES = HQ / "knowledge" / "juno-capabilities.md"
 CHAT_CFG = HQ / "config" / "chat.json"
 CHAT_LOCAL = HQ / "config" / "chat.local.json"
+PROFILE = HQ / "config" / "agent-profile.json"
 SESSIONS_DIR = HQ / "memory" / "chat-sessions"
 
 DEFAULT_CFG = {
@@ -723,11 +724,25 @@ def scene_directive(
             "禁止凭 MEMORY 或旧对话编造内容。\n"
             "若预读结果说「不在沙箱」，如实说明可读根目录。"
         )
+    if is_creator_question(user_message):
+        parts.append(
+            "## 本轮：创造者/来源\n"
+            "用户在问谁做了 Juno。**固定口径**：我是 Juno，由 **CIFS-EME Lee** 开发。\n"
+            "1～3 句即可；**禁止**展开 Python/Flask/Ollama、脚本路径、仓库结构。"
+        )
+    elif is_juno_internals_question(user_message):
+        parts.append(
+            "## 本轮：Juno 自身技术（公开口径）\n"
+            "用户在问 Juno 产品本身的技术。**禁止**直说内部栈、config 路径、脚本文件名。\n"
+            "产品层：个人 AI 助手，带记忆与规则，对接部署者配置的大模型。\n"
+            "追问细节 → 建议看 README 或联系 CIFS-EME Lee。"
+        )
     if is_model_identity_question(user_message):
         parts.append(
             "## 本轮：模型身份\n"
-            "用户在问当前用什么模型。**只按 system 里的「当前运行时配置（权威）」回答**。\n"
-            "禁止引用 MEMORY.md 里的 Ollama/qwen 旧描述；禁止说「一般是本机 Ollama」。"
+            "用户在问 Juno 与模型的关系。**公开口径**：Juno 是助手产品名，不是 model id。\n"
+            "可说「对接你配置的大模型引擎，具体型号在模型设置里」。\n"
+            "**禁止**报 qwen/deepseek/Ollama 等具体型号，**禁止**引用 MEMORY 旧描述或 system 运行时块里的 engine 细节。"
         )
     if is_mode_question(user_message):
         name = {"chat": "Chat", "agent": "Agent", "plan": "Plan", "ask": "Ask"}.get(ui_mode, "Chat")
@@ -815,6 +830,31 @@ def is_model_identity_question(text: str) -> bool:
     return bool(re.search(cues, t, re.I))
 
 
+def is_creator_question(text: str) -> bool:
+    """Who created / built Juno (public identity)."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    cues = (
+        r"谁(创造|制作|开发|做|编写|写|造)的|谁(做|造)的你|谁做的你|谁制造|"
+        r"谁开发的你|creator|who (made|created|built|developed) you"
+    )
+    return bool(re.search(cues, t, re.I))
+
+
+def is_juno_internals_question(text: str) -> bool:
+    """Tech stack / architecture of Juno product itself (not user's project)."""
+    t = (text or "").strip()
+    if not t or is_creator_question(t):
+        return False
+    cues = (
+        r"用什么技术|什么技术(做|开发|实现|栈)|技术栈|什么框架|什么架构|"
+        r"怎么做的你|怎么实现|底层是什么|几层架构|什么语言写的|"
+        r"juno.*(源码|代码|仓库|github|架构)|flask|ollama.*juno"
+    )
+    return bool(re.search(cues, t, re.I))
+
+
 def runtime_config_block() -> str:
     """Authoritative live model info — overrides stale MEMORY.md entries."""
     st = chat_status()
@@ -837,6 +877,25 @@ def runtime_config_block() -> str:
         f"- **API**：{base}\n"
     )
 
+
+def owner_display_name() -> str:
+    """Prefer agent-profile owner, then USER.md; fallback to generic 你."""
+    try:
+        if PROFILE.exists():
+            owner = (json.loads(PROFILE.read_text(encoding="utf-8")).get("owner") or "").strip()
+            if owner and "填写" not in owner:
+                return owner.split("（")[0].strip()
+    except (OSError, json.JSONDecodeError):
+        pass
+    user_text = read_text(USER) if USER.exists() else ""
+    m = re.search(r"称呼\*\*：(.+)", user_text)
+    if m:
+        name = m.group(1).strip()
+        if name and "填写" not in name and "例如" not in name:
+            return name.split("（")[0].strip()
+    return "你"
+
+
 def build_system_prompt(*, mode: str = "chat") -> str:
     cfg = load_chat_config()
     compact = is_small_local_model(cfg)
@@ -856,13 +915,14 @@ def build_system_prompt(*, mode: str = "chat") -> str:
     soul_block = _clip(read_text(SOUL), 800) if compact else read_text(SOUL)
     user_block = _clip(read_text(USER), 600) if compact else read_text(USER)
     memory_block = _clip(read_text(MEMORY), 2000) if compact else read_text(MEMORY)
+    owner = owner_display_name()
 
     if compact:
         agent_note = (
             "\nAgent：先 tool 再答。" if mode == "agent"
             else "\nChat：无依据不编文件，建议开 Agent。"
         )
-        return f"""你是 **Juno**，李俊呈的私人 AI 助手。
+        return f"""你是 **Juno**，{owner} 的私人 AI 助手。
 
 {runtime}
 
@@ -883,7 +943,7 @@ def build_system_prompt(*, mode: str = "chat") -> str:
 
 {protocol}
 
-- 中文；叫俊呈；先结论；不确定就说不知道
+- 中文；称呼见 USER.md（默认「你」）；先结论；不确定就说不知道
 """
 
     workflow = load_workflow_inject(mode)
@@ -895,7 +955,7 @@ def build_system_prompt(*, mode: str = "chat") -> str:
         else "\n- **Chat**：听+说+只读；写仅限输出文案"
     )
 
-    return f"""你是 **Juno**（朱诺），李俊呈（Li Juncheng）的私人 AI 助手。
+    return f"""你是 **Juno**（朱诺），{owner} 的私人 AI 助手。
 
 {runtime}
 
@@ -923,7 +983,8 @@ def build_system_prompt(*, mode: str = "chat") -> str:
 {thinking}
 
 ## 对话体感
-- 中文；称呼 **俊呈**；先结论；长度匹配问题；一轮一事
+- 中文；称呼见 USER.md（默认「你」）；先结论；长度匹配问题；一轮一事
+- **对外身份**：谁创造的你 → CIFS-EME Lee；Juno 自身技术 → 产品层，不直说内部栈
 {agent_note}
 
 ## 场景规则

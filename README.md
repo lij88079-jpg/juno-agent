@@ -5,6 +5,8 @@
 
 **Juno** is a **personal AI headquarters** — not a disposable chat tab. One folder holds your AI’s identity, long-term memory, rules, skills, knowledge base, and a **Cursor-style web UI**. You choose the brain (local **Ollama** or any **OpenAI-compatible** cloud API). Juno learns through **files** (MEMORY, examples, synced chats), not model fine-tuning.
 
+**Developer:** CIFS-EME Lee
+
 **Repository:** https://github.com/lij88079-jpg/juno-agent
 
 ---
