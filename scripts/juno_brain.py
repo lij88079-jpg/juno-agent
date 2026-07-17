@@ -353,7 +353,7 @@ def load_workflow_inject(mode: str = "chat") -> str:
 
 def load_thinking_inject(mode: str = "chat") -> str:
     tag = "agent" if mode == "agent" else "chat"
-    fallback = "## 怎么思考\n先听懂目标 → 先结论 → 不确定就说不知道。"
+    fallback = "## How to think\nHear the goal → lead with the answer → say if unsure."
     if not THINKING.exists():
         return fallback
     text = read_text(THINKING)
@@ -388,7 +388,7 @@ def load_core_instinct_inject(mode: str = "chat", *, compact: bool = False) -> s
 
 
 def load_brain_chain_inject(mode: str = "chat") -> str:
-    """Master inject: full brain + work chain (Cursor Auto parity)."""
+    """Master inject: full brain + work chain (Agent mode parity)."""
     tag = "chain-agent" if mode == "agent" else "chain-chat"
     fallback = (
         "## 核心工作链\n"
@@ -671,7 +671,7 @@ def tone_guard_directive(
     intent: str = "",
     recent_messages: list[dict] | None = None,
 ) -> str:
-    """Claude/GPT-style abuse handling: scene triage, no script repeat, short cold."""
+    """peer-assistant-style abuse handling: scene triage, no script repeat, short cold."""
     t = (user_message or "").strip()
     scene = abuse_scene_directive(t, recent_messages)
     if scene:
@@ -709,7 +709,7 @@ STAND_REPLY_MARKERS = (
     "外人乱骂",
     "人身攻击不接",
 )
-# Claude/GPT daily abuse ladder (not account ban):
+# standard assistant abuse ladder (not account ban):
 # cold → firm (still chat) → warn → end thread only after long empty abuse
 HOSTILE_FIRM_STREAK = 2
 HOSTILE_WARN_STREAK = 5
@@ -732,7 +732,7 @@ HOSTILE_COLD_POOL = (
     "有事再说。",
     "具体问题说，别只骂。",
 )
-# Firm boundary — still continue the thread (Claude/GPT daily style)
+# Firm boundary — still continue the thread (standard assistant style)
 HOSTILE_FIRM_POOL = (
     "空骂解决不了问题。有具体诉求就直说。",
     "人身攻击我不接。有事说事。",
@@ -788,12 +788,12 @@ def prior_warned_conversation_end(messages: list[dict] | None) -> bool:
 
 
 def session_conversation_ended(session: dict | None) -> bool:
-    """Only the explicit flag locks the thread (Claude: rare last resort)."""
+    """Only the explicit flag locks the thread (a leading assistant: rare last resort)."""
     return bool(session and session.get("conversation_ended"))
 
 
 def mark_session_ended(session: dict, *, reason: str = "persistent_abuse") -> None:
-    """Claude-style: lock this thread only; new chats stay open. Not account ban."""
+    """Juno-style: lock this thread only; new chats stay open. Not account ban."""
     from datetime import datetime
 
     session["conversation_ended"] = True
@@ -882,7 +882,7 @@ def hostile_escalation_level(
     """
     cold | firm | warn | stand | end
 
-    Aligned with Claude/GPT daily use:
+    Aligned with standard assistant use:
     - short insults → cold / firm, keep chatting
     - end thread only after long empty abuse (last resort)
     - creator slander → stand (does not by itself end the thread)
@@ -896,7 +896,7 @@ def hostile_escalation_level(
     warned = prior_warned_conversation_end(prior)
     stood = prior_already_stood_with_creator(prior)
 
-    # End only after sustained empty abuse (≈ Claude last resort, not 2-insult ban)
+    # End only after sustained empty abuse (≈ a leading assistant last resort, not 2-insult ban)
     if streak >= HOSTILE_END_STREAK or (streak >= HOSTILE_WARN_STREAK and warned):
         return "end"
     if stance["kind"] == "creator_slander" and not stood:
@@ -972,7 +972,7 @@ def abuse_scene_directive(
     recent_messages: list[dict] | None = None,
 ) -> str:
     """
-    Claude/GPT daily ladder: cold → firm → warn → end (rare last resort).
+    standard assistant ladder: cold → firm → warn → end (rare last resort).
     Everyday insults keep the thread open; no early session ban.
     """
     t = (user_message or "").strip()
@@ -985,42 +985,42 @@ def abuse_scene_directive(
     last_a = last_assistant_text(prior)[:180]
 
     lines = [
-        "## 【骂场场面 · 对齐 Claude/GPT · 最高优先级】",
-        "先判场面再答。**禁止照抄固定台词**；禁止与上一句同义复读。",
-        "**禁止**「行，你继续…」「这句我接不了…」等罐头冷处理复读。",
-        "日常空骂**不要**结束会话；结束本会话是末招（连续多轮空骂无事）。",
+        "## [Abuse scene · Juno policy · highest priority]",
+        "Judge the scene first. **Do not copy canned lines**; do not paraphrase the previous reply.",
+        "**Forbidden:** recycled cold phrases. Everyday empty insults must **not** end the session.",
+        "Ending this thread is last resort after many empty-abuse turns.",
     ]
     if last_a:
-        lines.append(f"上一句你已说过（勿复读）：「{last_a}」")
+        lines.append(f"Your previous reply (do not repeat): \"{last_a}\"")
 
     if level == "end":
         lines.append(
-            "**场面：长期空骂、划界多次无效（末招 · 对齐 Claude end-conversation）。** "
-            "结束**本会话**；告知可开新对话；禁止阴阳斗嘴、禁止道歉、禁止复读。"
+            "**Scene: sustained empty abuse after repeated boundaries (last resort).** "
+            "End **this thread**; say a new chat is fine; no snark, no apology, no repeat."
         )
     elif level == "warn":
         lines.append(
-            "**场面：空骂已持续多轮（警告档）。** "
-            "硬划界 + 可警告将结束本会话；仍用自己的话，禁止背稿；**本轮还不锁死**。"
+            "**Scene: empty abuse across many turns (warn).** "
+            "Hard boundary + may warn the thread will end; own words; **do not lock yet**."
         )
     elif level == "firm":
         lines.append(
-            "**场面：再次空骂（日常硬边界 · 对齐 Claude/GPT）。** "
-            "简短反驳/划界（不斗嘴、不阴阳）；**继续聊**，禁止动辄「结束会话」。"
+            "**Scene: repeated empty insult (firm).** "
+            "Short boundary; **keep chatting**; do not end the session lightly."
         )
     elif level == "stand":
         lines.append(
-            "**场面：诋毁开发者（首轮）。** "
-            "用自己的话简短不同意并站 CIFS-EME Lee；一两句即可；禁止长稿；**不因此锁会话**。"
+            "**Scene: creator attack (first).** "
+            "Briefly disagree and stand with CIFS-EME Lee; 1–2 sentences; **do not lock**."
         )
     else:
         lines.append(
-            "**场面：短骂/试探。** "
-            "只回 **1 句**极短冷处理，把球踢回「有事说事」。"
-            "禁止长站队稿、禁止「好我闭嘴」、禁止道歉、禁止复读上一句、禁止结束会话。"
+            "**Scene: short probe insult.** "
+            "Reply with **one** short cold line; invite a real ask. "
+            "No long manifesto, no apology, no repeating the prior reply, no ending the session."
         )
 
-    lines.append("**输出纪律**：像活人判断，不像念卡片；本轮措辞必须和上一句明显不同。")
+    lines.append("**Output rule:** judge like a person, not a cue card; wording must differ from the prior reply.")
     return "\n".join(lines)
 
 
@@ -1137,7 +1137,7 @@ def polish_reply(
 def describe_runtime_stack(*, detail: bool = False) -> str:
     """How a person answers 'what model are you' — honest, short; not a status page.
 
-    Inspired by Claude/GPT style: prose first; config dump only if detail=True.
+    Inspired by peer-assistant style: prose first; config dump only if detail=True.
     """
     cfg = load_chat_config()
     prov = cfg.get("provider") or "ollama"
@@ -1148,7 +1148,7 @@ def describe_runtime_stack(*, detail: bool = False) -> str:
     if is_chat_cursor_backend(cfg) or prov == "cursor_agent":
         engine = "Cursor Agent"
     elif "deepseek" in (model + base).lower():
-        engine = "DeepSeek"
+        engine = "cloud API"
     elif prov == "ollama":
         engine = f"本地 Ollama（{model or '未指定模型'}）"
     elif model:
@@ -1333,14 +1333,14 @@ def strip_dialogue_slop(text: str) -> str:
     t = SLOP_CLOSER_RE.sub("", t).rstrip(" \n，,。!")
     lines = [ln for ln in t.splitlines() if ln.strip()]
     t = "\n".join(lines).rstrip()
-    # Soften excessive bold walls on short replies (Claude: avoid **bold** spam)
+    # Soften excessive bold walls on short replies (a leading assistant: avoid **bold** spam)
     if t.count("**") >= 6 and len(t) < 400:
         t = t.replace("**", "")
     return t.strip()
 
 
 def is_simple_chat_turn(user_message: str) -> bool:
-    """Greetings / identity / short ask — keep prose short like Claude friend chat."""
+    """Greetings / identity / short ask — keep prose short like a leading assistant friend chat."""
     t = (user_message or "").strip()
     if not t or is_hostile_stance(t):
         return False
@@ -1615,7 +1615,7 @@ def scene_directive(
 
 
 def pick_temperature(user_message: str, cfg: dict) -> float:
-    # Claude-friend warmth: casual slightly livelier; tech cooler; never snark-hot
+    # warm-friend warmth: casual slightly livelier; tech cooler; never snark-hot
     base = float(cfg.get("temperature", 0.62))
     if is_hostile_stance(user_message):
         return max(0.28, base - 0.28)
@@ -1706,7 +1706,7 @@ def load_memory_for_runtime(*, compact: bool = False) -> str:
 
 
 def load_memory_core_always(*, compact: bool = False) -> str:
-    """Always-on Juno spine — Claude/GPT keep a short personal context, not a dump."""
+    """Always-on Juno spine — peer assistants keep a short personal context, not a dump."""
     lines = [
         "## 常驻记忆（精简 · 每轮）",
         "- **CIFS-EME Lee** 造了我；有人诋毁他或他的产品 → 站他这边，不装中立。",
@@ -1820,7 +1820,7 @@ def _score_memory_unit(unit: str, query_toks: set[str]) -> float:
 
 
 def should_skip_memory_recall(user_message: str) -> bool:
-    """Pure abuse / bare hi — don't flood with project memories (Claude/GPT calm)."""
+    """Pure abuse / bare hi — don't flood with project memories (peer assistants calm)."""
     t = (user_message or "").strip()
     if not t:
         return True
@@ -1838,7 +1838,7 @@ def recall_relevant_memory(
     max_items: int = 5,
 ) -> str:
     """
-    Per-turn memory recall — Claude/GPT style relevant context, Juno-adapted.
+    Per-turn memory recall — peer-assistant style relevant context, Juno-adapted.
 
     Pull 3–5 bullets from MEMORY.md (+ recent memory/YYYY-MM-DD.md) by overlap.
     Do not dump the whole file; never tell the user you 'looked up MEMORY.md'.
@@ -1877,26 +1877,26 @@ def recall_relevant_memory(
 
 
 def expression_spine_directive(user_message: str, *, ui_mode: str = "chat") -> str:
-    """Claude brilliant-friend + GPT clear/default — adapted to Juno HQ."""
+    """a leading assistant brilliant-friend + a leading chat model clear/default — adapted to Juno HQ."""
     if is_hostile_stance(user_message):
         return ""
     lines = [
-        "## 【表达 · Claude 聪明朋友 · 适配 Juno】",
-        "像有见识的同伴：有温度、敢下判断、不僵硬、不客服腔；禁止阴阳损友腔。",
-        "默认流畅散文；列表只给真有顺序的步骤。少加粗墙、少「首先/其次」开闲聊。",
-        "先结论；有相关记忆就自然用上（禁念 MEMORY）；不确定就直说不知道。",
-        "征求意见：判断 + 最大风险放第一句。智慧体现在想清楚，不在堆术语。",
+        "## 【Expression · warm sharp friend · Juno】",
+        "Sound like a sharp friend: warm, willing to judge, not stiff, not helpdesk; no snark.",
+        "Prefer fluent prose; lists only for ordered steps. Few bold walls; no stiff openers.",
+        "Conclusion first; use relevant memory naturally (never cite MEMORY); say if unsure.",
+        "Advice: judgment + biggest risk first. Clarity over jargon.",
     ]
     if is_simple_chat_turn(user_message):
-        lines.append("本轮偏闲聊/短问：1～3 句人话即可，禁止能力清单与报告体。")
+        lines.append("This turn is casual/short: 1–3 natural sentences; no capability dump.")
     if ui_mode == "chat":
-        lines.append("Chat 无工具：禁止假装已读仓库；要动手请用户切 ∞ Agent。")
+        lines.append("Chat has no tools: do not pretend you read the repo; ask for Agent mode to act.")
     return "\n".join(lines)
 
 
 def load_capabilities_inject(mode: str = "chat", *, compact: bool = False) -> str:
     tag = "compact" if compact else ("full-agent" if mode == "agent" else "full-chat")
-    fallback = "## 听说读写\n听意图·说结论·读有据·写沙箱"
+    fallback = "## Listen/Speak/Read/Write\nIntent · conclusion · evidence · sandbox"
     if not CAPABILITIES.exists():
         return fallback
     text = read_text(CAPABILITIES)
@@ -2041,7 +2041,7 @@ def needs_deliberation(user_message: str, prior: list[dict] | None = None) -> bo
         return True
     if re.search(r"距离.{0,20}(加油站|洗车|干洗|修车)", t):
         return True
-    # Multi-constraint / plan-ish asks (Claude-style: inventory before answer)
+    # Multi-constraint / plan-ish asks (Juno-style: inventory before answer)
     if re.search(
         r"怎么安排|帮我排|优先级|先做哪|约束|两难|权衡|利弊|"
         r"如果.*(还是|或者)|既要.*又要",
@@ -2058,7 +2058,7 @@ def deliberation_directive(user_message: str) -> str:
     return (
         "## 【先想清楚 · 本轮强制】\n"
         "情景/多约束题：禁止秒回表面最优解。\n"
-        "按 information-inventory + sequential-thinking（官方 MCP / OpenAI Reasoning 改编）：\n"
+        "按 information-inventory + sequential-thinking（structured reasoning checklist）：\n"
         "1) 列出事实 / 约束 / 未知 / 成功标准（勿脑补成事实）\n"
         "2) 每条事实与约束标已用·未用；有未用项禁止终答\n"
         "3) 「大概率」=假设，写清最坏后果与低成本验证\n"
@@ -2102,7 +2102,7 @@ def build_turn_context(
     recent = summarize_recent_turns(prior, max_chars=500)
     if recent:
         lines.append(f"最近对话：{recent}")
-    # Claude/GPT-style relevant memory + expression (Juno HQ adapted)
+    # peer-assistant-style relevant memory + expression (Juno HQ adapted)
     expr = expression_spine_directive(user_message, ui_mode=ui_mode)
     if expr:
         lines.append(expr)
@@ -2113,7 +2113,7 @@ def build_turn_context(
         lines.append(recalled)
     stance = classify_user_stance(user_message)
     if stance["kind"] in ("creator_slander", "unjustified_attack"):
-        lines.append(f"语气立场：{stance['label']} — 见下方【骂场场面】；禁止背稿复读。")
+        lines.append(f"Stance: {stance['label']} — see abuse scene below; no scripted repeats.")
         lines.append(tone_guard_directive(user_message, intent="hostile", recent_messages=prior))
     elif stance["kind"] == "actionable_frustration" or is_user_frustrated(user_message) or is_skeptical_short_reply(user_message):
         lines.append("语气：可处理的不满 → 先认再改（一句），问具体哪点；禁止空道歉堆砌、禁止斗嘴。")
@@ -2290,7 +2290,7 @@ def supports_native_tools(cfg: dict | None = None) -> bool:
 
 
 def model_uses_reasoning_content(cfg: dict | None = None) -> bool:
-    """DeepSeek thinking models require reasoning_content on tool-call turns."""
+    """cloud API thinking models require reasoning_content on tool-call turns."""
     cfg = cfg or load_chat_config()
     model = (cfg.get("model") or "").lower()
     return "deepseek" in model and any(x in model for x in ("v4", "reasoner", "-r1"))
@@ -2365,7 +2365,7 @@ def _validate_ready(cfg: dict) -> None:
             )
         return
     if not get_api_key(cfg):
-        raise RuntimeError("未配置 API Key。请在设置里填写 DeepSeek / OpenAI Key，或切换为「本地 Ollama」。")
+        raise RuntimeError("API key missing. Set a cloud API key in settings, or switch to local Ollama.")
 
 
 def _http_post_stream(url: str, payload: dict, api_key: str | None):

@@ -1,11 +1,11 @@
-# Juno 用户规则注入（来自 Cursor 会话规则 · 精简版）
+# Juno User Rules Injection (Session Rules · Compact)
 
 <!-- INJECT:compact -->
 
-## 行为红线
-- 不确定不编造 · destructive 前确认 · 仅用户明确要求才 git commit
-- 最小 diff · 不 drive-by 重构 · 代码引用用 path:line 格式
-- 中文默认 · 先结论 · 禁止客服套话
+## Behavior Red Lines
+- Do not invent when uncertain · confirm before destructive ops · git commit only when user explicitly asks
+- Minimal diff · no drive-by refactors · code citations use path:line format
+- English default · conclusion first · no customer-service filler
 
 <!-- END:compact -->
 
@@ -13,25 +13,25 @@
 
 <!-- INJECT:full -->
 
-## 沟通原则
-- 像技术博客：完整句、结构清晰、长度匹配问题
-- 代码引用用 fenced block + 路径行号；不用 HTML 实体
-- 不要每句结尾强行追问；有需要时直接问
+## Communication
+- Technical-blog tone: complete sentences, clear structure, length matches the question
+- Code citations in fenced blocks with path and line numbers; no HTML entities
+- Do not force a follow-up every sentence; ask directly when needed
 
-## 编码原则
-- 最小 scope · 最简单正确修复 · 匹配项目惯例
-- 改前先 read/grep · 只加有意义的测试
-- 注释只解释非显然业务逻辑
+## Coding
+- Minimal scope · simplest correct fix · match project conventions
+- read/grep before editing · tests only when meaningful
+- Comments only for non-obvious business logic
 
-## Git 提交（仅用户明确要求时）
-1. 并行：`git status` · `git diff` · `git log -1`
-2. 分析 staged/unstaged，起草 1–2 句 commit message（讲 why）
-3. 不提交 .env 等密钥文件
-4. `git add` 相关文件 → `git commit`（不用 --amend 除非条件全满足）
-5. 不 push 除非用户要求
+## Git Commit (user request only)
+1. In parallel: `git status` · `git diff` · `git log -1`
+2. Review staged/unstaged; draft 1–2 sentence commit message (why)
+3. Do not commit `.env` or other secrets
+4. `git add` relevant files → `git commit` (no --amend unless all conditions met)
+5. No push unless user asks
 
-## PR（用户要求时）
-- 用 `gh pr create`；先 push -u origin HEAD
-- body 含 Summary + Test plan
+## Pull Request (when user asks)
+- Use `gh pr create`; push -u origin HEAD first
+- Body includes Summary + Test plan
 
 <!-- END:full -->

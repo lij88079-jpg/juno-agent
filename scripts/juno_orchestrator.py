@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Juno Auto orchestration layer — intent routing + prefetch (Cursor Auto-lite)."""
+"""Juno Auto orchestration layer — intent routing + prefetch (Agent mode-lite)."""
 from __future__ import annotations
 
 import json
@@ -218,7 +218,7 @@ def step_directive(
             return "【编排层】寒暄类：禁止调用工具，直接 1～2 句回复。"
         if intent == "hostile":
             return (
-                "【编排层】骂场（对齐 Claude）：先看【骂场场面】——"
+                "[Orchestrator] Abuse (Juno policy): follow the abuse-scene block — "
                 "短骂冷处理、站队不背稿、禁止复读上一句、连骂无事则停；禁止道歉跪舔。"
             )
         if intent == "frustrated":
@@ -246,7 +246,7 @@ def step_directive(
             return "【编排层】验证类：先定位文件，再 run_shell（仅白名单命令）。"
         if intent == "file":
             return (
-                "【编排层】日常文件（对齐 Auto）："
+                "[Orchestrator] File ops (Agent-style): "
                 "项目名 → find_project；桌面/下载/文档 → list_dir/glob → read_file；"
                 "要改 → str_replace/write_file → 核对；要跑 → run_shell；"
                 "办公件走 docx/xlsx/pdf skill。禁止编造未读内容。"

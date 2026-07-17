@@ -331,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(context_paths, list):
             context_paths = []
 
-        # Claude-style: ended thread cannot accept new messages (new chat still ok)
+        # Juno-style: ended thread cannot accept new messages (new chat still ok)
         if juno_brain.session_conversation_ended(session):
             ended_msg = (
                 "本会话已结束。开一个新对话继续即可；"

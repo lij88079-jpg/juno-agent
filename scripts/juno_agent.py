@@ -44,7 +44,7 @@ def build_agent_system_prompt(*, chat_mode: str = "agent", plan_mode: bool = Fal
         f"{tool_lines}\n\n"
         "### 本地模型调用格式（一轮一个 tool 或最终答案）\n"
         '```tool\n{"name":"read_file","args":{"path":"scripts/juno_brain.py","offset":1,"limit":80}}\n```'
-        "\n\n## 工作链（对齐 Cursor Auto · 扁平穿插，不是分区剧本）\n"
+        "\n\n## Work chain (Agent mode · flat interleaved timeline)\n"
         "每轮干活必须有自己的分析与计划，禁止碰到问题就无脑调工具。\n"
         "可见形态是一条时间线：Thinking ↔ Read/Grepped/Ran/Edited 穿插。\n"
         "1) 先调用 think：用 2～5 句写清「题意 / 成功标准 / 本轮计划」\n"
@@ -430,7 +430,7 @@ def run_agent_stream_events(
     context_paths: list[dict] | None = None,
     session_title: str = "",
 ) -> Generator[dict[str, Any], None, None]:
-    """Yield flat CoT events: Exploring timeline of Thinking ↔ tools (Cursor Auto style)."""
+    """Yield flat CoT events: Exploring timeline of Thinking ↔ tools (Agent mode style)."""
     import time as _time
 
     cfg = juno_tools.load_profile()

@@ -1,6 +1,6 @@
-# 轮次上下文 · 注入模板
+# Turn Context · Injection Template
 
-> 每轮只注入**事实上下文**（用户意图、上文、模式），不是规则手册。
+> Each turn injects **factual context only** (user intent, prior turns, mode)—not a rule manual.
 
 ---
 

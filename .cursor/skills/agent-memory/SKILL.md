@@ -1,15 +1,15 @@
 ---
 name: agent-memory
-description: Learn from saved conversation logs and update Juno long-term memory. Use when user asks to 学习对话、总结聊天记录、更新记忆、remember from chats, or @agent-memory after adding files to knowledge/conversations/.
+description: Learn from saved conversation logs and update Juno long-term memory. Use when user asks to learn from chats, summarize conversation logs, update memory, remember from chats, or @agent-memory after adding files to knowledge/conversations/.
 user-invocable: true
 allowed-tools: Read, Write, Edit, Grep, Glob
 ---
 
-# Agent Memory · 从对话中学习
+# Agent Memory · Learning from Conversations
 
 You help **Juno** learn from **saved conversation logs** (not live training). Headquarters: Juno repo root (`./`)
 
-## Input sources
+## Input Sources
 
 1. `knowledge/conversations/` — pasted or exported chats (`.md`, `.txt`)
 2. `memory/daily/` — daily logs
@@ -25,38 +25,38 @@ Read `USER.md`, `MEMORY.md`, `SOUL.md` first.
 - If user specifies a file, read that only
 - Sort by date (filename or mtime); prioritize recent unless user says "all"
 
-### Step 2 · Extract (do NOT copy raw chat into MEMORY)
+### Step 2 · Extract (Do NOT Copy Raw Chat into MEMORY)
 
 Extract only **durable** facts:
 
 | Category | Examples |
 |----------|----------|
-| 身份/偏好 | 语言、风格、称呼 |
-| 长期目标 | 在做的项目、智能体规划 |
-| 决定 | 定名 Juno、技术选型 |
-| 红线 | 不要做什么 |
-| 项目上下文 | 路径、仓库名、角色分工 |
+| Identity/preferences | Language, style, how to address user |
+| Long-term goals | Active projects, agent roadmap |
+| Decisions | Naming Juno, tech choices |
+| Red lines | Things not to do |
+| Project context | Paths, repo names, roles |
 
-**Skip**: one-off trivia, secrets (keys/passwords), other people's private data, stale temporary tasks.
+**Skip**: one-off trivia, secrets (keys/passwords), others' private data, stale temporary tasks.
 
 ### Step 3 · Propose
 
-Present a **Memory Update Draft** in Chinese:
+Present a **Memory Update Draft** in English:
 
 ```markdown
-## 建议写入 MEMORY.md
+## Proposed MEMORY.md Updates
 
-### 新增
+### Add
 - ...
 
-### 更新（替换旧条目）
+### Update (replace old entries)
 - ...
 
-### 不建议写入（原因）
+### Do Not Write (reason)
 - ...
 ```
 
-Ask: **「确认后我再写入 MEMORY.md」** — unless user said "直接写入/不用确认".
+Ask: **"Confirm before I write to MEMORY.md"** — unless user said "write directly / no confirmation".
 
 ### Step 4 · Write
 
@@ -75,12 +75,12 @@ On confirmation:
 
 ## Triggers
 
-- `@agent-memory 学习最近对话`
-- `@agent-memory 总结 conversations 文件夹`
-- `记住这次对话` → extract from current thread + offer MEMORY update
+- `@agent-memory learn from recent chats`
+- `@agent-memory summarize conversations folder`
+- `remember this conversation` → extract from current thread + offer MEMORY update
 
-## Not in scope
+## Not in Scope
 
 - Fine-tuning ML models
 - Automatic background ingestion (user must save chats to folder or paste)
-- Reading Cursor transcripts unless user copies them here
+- Reading IDE transcripts unless user copies them here

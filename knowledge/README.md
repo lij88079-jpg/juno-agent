@@ -1,22 +1,22 @@
-# 知识库 Knowledge Base
+# Knowledge Base
 
-把希望 AI **长期参考** 的文件放在此目录：
+Store files you want the AI to **reference long-term** in this directory:
 
-- PDF、Word、Markdown、TXT
-- 项目说明、个人笔记、规范文档
-- 可按主题分子文件夹，例如 `work/`、`learning/`、`personal/`
+- PDF, Word, Markdown, TXT
+- Project docs, personal notes, standards
+- Subfolders by topic, e.g. `work/`, `learning/`, `personal/`
 
-## 使用方式
+## Usage
 
-在 Cursor 对话中：
+In an IDE conversation:
 
 ```
-@my-core-agent 根据 knowledge/xxx.md 回答……
+@my-core-agent Answer based on knowledge/xxx.md …
 ```
 
-或直接 @ 具体文件。
+Or @ the specific file directly.
 
-## 注意
+## Notes
 
-- 敏感信息（密码、密钥）**不要**放入此目录
-- 文件越大，对话前越需要明确 @ 范围
+- Do **not** store secrets (passwords, API keys) here
+- Large files: @ a narrow scope before asking

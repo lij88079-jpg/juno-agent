@@ -1,10 +1,10 @@
 ---
 name: agent-coding
-description: Programming, debugging, refactoring, shell tasks, project work. Use when user needs 写代码、改bug、项目、脚本、架构, or @agent-coding.
+description: Programming, debugging, refactoring, shell tasks, project work. Use when user needs code, bug fixes, projects, scripts, architecture, or @agent-coding.
 user-invocable: true
 ---
 
-# Agent Coding · 编程与项目
+# Agent Coding · Programming & Projects
 
 ## Workflow
 

@@ -1,0 +1,17 @@
+# Getting started
+
+1. Open **Cursor** → File → Open Folder → select this repo root (`juno-agent` after clone).
+
+2. Edit **USER.md** and **SOUL.md** (your name and preferences).
+
+3. Read **BOOTSTRAP.md** for the first run checklist.
+
+4. Run `python scripts/juno_training_server.py` (or `scripts/open-juno-chat.bat` on Windows) → open `/chat`.
+
+5. In any project you can `@my-core-agent` from Cursor.
+
+6. Open `/studio` for memory and training examples.
+
+Headquarters path: repository root (`./`).
+
+See **README.md** for configuration (`chat.local.json`, `agent-profile.local.json`).

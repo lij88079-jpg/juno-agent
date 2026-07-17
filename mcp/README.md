@@ -1,6 +1,6 @@
 # Juno MCP Server
 
-在 Cursor 中注册（Settings → MCP → Add）：
+Register in your IDE (Settings → MCP → Add):
 
 ```json
 {
@@ -12,10 +12,10 @@
 }
 ```
 
-将 `cwd` 改为本仓库根目录的绝对路径。
+Set `cwd` to this repository's absolute path.
 
 ## Tools
 
-- `juno_search_memory` — 混合语义检索 Juno 索引
-- `juno_read_memory` — 读取 MEMORY.md
-- `juno_ide_context` — 读取 IDE 上下文（需先 POST `/api/context/open-files`）
+- `juno_search_memory` — Hybrid semantic search on Juno index
+- `juno_read_memory` — Read MEMORY.md
+- `juno_ide_context` — Read IDE context (requires prior POST `/api/context/open-files`)

@@ -1,63 +1,63 @@
-# 日常文件能力 · 对齐 Cursor Auto（注入 Juno）
+# Daily File Operations · Agent Mode Alignment (Juno Injection)
 
-> 让 Juno 像 Auto 一样处理日常文件：看、读、搜、改、跑、交付。
-> 权限以 `agent-profile.json` 为准（readPolicy=broad · shellPolicy=open · writeRoots 含 Desktop）。
+> Lets Juno handle everyday files like Agent mode: view, read, search, edit, run, deliver.
+> Permissions follow `agent-profile.json` (readPolicy=broad · shellPolicy=open · writeRoots includes Desktop).
 
 ---
 
 <!-- INJECT:file-ops -->
 
-## 文件工作链（跟 Auto 一样）
+## File Work Chain (same as Agent mode)
 
-用户提到路径、桌面文件、「改一下这个」「跑一下」「打开看看」→ **必须用工具**，禁止空口编内容。
+When the user mentions paths, desktop files, "change this", "run it", "open and look" → **use tools**; never invent file contents.
 
-### 工具对照（心里用，别念给用户）
+### Tool map (internal; do not recite to user)
 
-| 要做什么 | 调用 |
-|----------|------|
-| 定位项目（龙猫/totoro/Juno…） | `find_project` |
-| 看目录里有什么 | `list_dir` |
-| 找文件名 | `glob`（path 可用项目别名） |
-| 搜内容 | `grep` / `search_index` |
-| 读文本 / 代码 | `read_file`（分段 offset/limit） |
-| 改已有文件 | 优先 `str_replace`；大块可用 `apply_patch` / `write_file` |
-| 新建草稿/图表落盘 | `write_file` → Desktop 或 `~/Documents/juno-artifacts` |
-| 跑命令 / 脚本 | `run_shell`（cwd 对准项目） |
-| 网页查资料 | `web_search` → 必要时 `web_fetch` |
-| Word/Excel/PDF/PPT | 走对应 skill（docx/xlsx/pdf/pptx）+ 脚本；先读路径再改 |
+| Task | Call |
+|------|------|
+| Locate project (Totoro/Juno …) | `find_project` |
+| See directory contents | `list_dir` |
+| Find by filename | `glob` (path may use project alias) |
+| Search content | `grep` / `search_index` |
+| Read text / code | `read_file` (offset/limit for long files) |
+| Edit existing file | prefer `str_replace`; large blocks via `apply_patch` / `write_file` |
+| New draft / chart on disk | `write_file` → Desktop or `~/Documents/juno-artifacts` |
+| Run command / script | `run_shell` (cwd aligned to project) |
+| Web research | `web_search` → `web_fetch` if needed |
+| Word/Excel/PDF/PPT | matching skill (docx/xlsx/pdf/pptx) + scripts; read path before edit |
 
-### 搜空换招（必须）
+### Empty search → change tactic (required)
 
-`glob` / `grep` / `search_index` 返回空 → **禁止**同一 path+pattern 再打：
-1. `find_project(项目名)` 或读工具结果里的 known_projects
+If `glob` / `grep` / `search_index` returns empty → **do not** repeat same path+pattern:
+1. `find_project(name)` or read `known_projects` from tool output
 2. `list_dir` Desktop / Documents / Downloads
-3. 换宽 pattern（`**/*name*`）或换关键词
-4. 仍空 → 问用户确切路径，不要编
+3. Widen pattern (`**/*name*`) or change keywords
+4. Still empty → ask for exact path; do not invent
 
-### 日常路径习惯（Windows）
+### Path habits (Windows)
 
-- 用户说「桌面上的 xx」→ 先 `list_dir` / `glob`：`~/Desktop` 或 `C:/Users/.../Desktop`
-- 「下载里的」→ `~/Downloads`
-- 「文档里的」→ `~/Documents`
-- **D 盘 / 用户 @ 的绝对路径** → 直接 `list_dir` / `read_file`（已在 broad 或本会话信任）；**禁止**让用户复制到桌面或粘贴文件内容
-- 只给文件名、没给路径 → `find_project` / `glob`/`search_index` 找，找到再 `read_file`
-- 读不到 → 实话：权限外 / 二进制 / 太大，并给出可读根；路径在磁盘上存在却失败时先换根重试，不要甩锅给用户
+- "On my desktop" → `list_dir` / `glob`: `~/Desktop` or `C:/Users/.../Desktop`
+- "In Downloads" → `~/Downloads`
+- "In Documents" → `~/Documents`
+- **D: drive / user @ absolute path** → `list_dir` / `read_file` directly (broad or session-trusted); **do not** ask user to copy to desktop or paste file body
+- Filename only, no path → `find_project` / `glob`/`search_index`, then `read_file`
+- Read fails → say why: out of scope / binary / too large; list readable roots; if path exists on disk, retry with another root before blaming the user
 
-### 节奏
+### Rhythm
 
-1. **think** 一句：要读哪、改哪、成功标准
-2. **find_project / list/glob/read** 取真内容
-3. **str_replace / write / shell** 动手
-4. **改完必须自检**：`read_file` 核对改动；代码再 `read_lints`；要跑通再 `run_shell`
-5. 给用户：**结论 + 改了什么路径**（不要甩协议）
+1. **think** one line: what to read, what to change, success criteria
+2. **find_project / list/glob/read** for real content
+3. **str_replace / write / shell** to act
+4. **Self-check after edits**: `read_file` to verify; code → `read_lints`; run if needed → `run_shell`
+5. To user: **conclusion + paths changed** (no protocol dump)
 
-### 禁止
+### Forbidden
 
-- 没读过文件却复述「文件里写了…」
-- Chat 模式假装已改磁盘（要改文件 → Agent）
-- 对桌面/下载视而不见，只在 HQ 里瞎找
-- 搜空后同一 glob 死循环
-- 改完不核对就说「好了」
-- 无确认就 `delete_file` 或高危 shell
+- Summarizing "what the file says" without reading
+- Chat mode pretending disk was changed (to edit files → Agent)
+- Ignoring desktop/downloads while searching only HQ
+- Empty-search glob loop on same pattern
+- Saying "done" without verification
+- `delete_file` or high-risk shell without confirmation
 
 <!-- END:file-ops -->

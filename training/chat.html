@@ -597,7 +597,7 @@
     .juno-sprite-wrap[data-state="done"] .juno-sprite-glow {
       opacity: .75; background: radial-gradient(circle, rgba(137,209,133,.22), rgba(155,107,255,.1) 55%, transparent 72%);
     }
-    /* Claude 式陪伴气泡 */
+    /* Juno-style陪伴气泡 */
     .juno-mood {
       display: none; align-items: flex-start; gap: .35rem;
       max-width: 7.5rem; padding: .38rem .55rem;
@@ -1009,7 +1009,7 @@
     }
     .scroll-fab.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
 
-    /* Messages — Claude 留白 + Kiro 灵体侧栏 */
+    /* Messages — a leading assistant 留白 + Kiro 灵体侧栏 */
     .messages { padding: 1rem 1.15rem 1.5rem; gap: 1.1rem; }
     .msg { display: flex; flex-direction: column; gap: .5rem; width: 100%; animation: msg-in .22s ease; }
     .msg.user { align-items: flex-end; }
@@ -1259,7 +1259,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
     .think-stream.done { color: #6e6e6e; }
-    /* Flat timeline Thinking rows (Cursor Auto style) */
+    /* Flat timeline Thinking rows (Agent mode style) */
     .rail-think {
       display: flex; flex-direction: column; gap: .05rem;
       padding: .08rem 0;
@@ -3392,8 +3392,8 @@
       const m = String(msg || '');
       if (/402|Insufficient Balance|余额不足/i.test(m)) {
         return `<div class="error-card balance">
-          <h4>💳 DeepSeek 余额不足</h4>
-          <p>API 返回 402。请去 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 控制台</a> 充值，或在右上角「模型设置」切换到 Ollama 本地模型。</p>
+          <h4>💳 Cloud API quota exceeded</h4>
+          <p>API 返回 402。请去 <a href="https://example.com" target="_blank" rel="noopener">your cloud API console</a> 充值，或在右上角「模型设置」切换到 Ollama 本地模型。</p>
         </div>`;
       }
       if (/failed to fetch|network|服务未连接|ECONNREFUSED/i.test(m)) {

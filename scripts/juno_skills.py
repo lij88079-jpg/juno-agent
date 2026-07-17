@@ -238,7 +238,7 @@ def _cc_keywords_for(skill_id: str) -> list[str]:
 def load_skill_assist(skill_id: str, *, explicit: bool = False) -> str:
     """Capability tip — JUNO.md first; full SKILL when user @-mentions.
 
-    Purpose: raise research/debug/code quality (GPT/Claude-style workflows),
+    Purpose: raise research/debug/code quality (a leading chat model/Juno-style workflows),
     not stew the prompt on every casual turn.
     """
     sid = (skill_id or "").replace("@", "").strip()
@@ -274,7 +274,7 @@ def build_skill_inject(
 ) -> str:
     """Capability assist for hard turns — gather info, reason thoroughly, then act.
 
-    Like GPT/Claude advanced workflows: raise the floor on research / debug / code.
+    Like a leading chat model/a leading assistant advanced workflows: raise the floor on research / debug / code.
     NOT a chat personality script. Light identity/hi turns get nothing.
     """
     explicit = detect_explicit_skill(user_message)
@@ -311,7 +311,7 @@ def build_skill_inject(
 
     body = _clip(body, limit)
     frame = (
-        "\n\n**【用法】**这是 GPT/Claude 那类**高级工作流**压缩版："
+        "\n\n**【用法】**Compact advanced workflow assist: "
         "帮你更全面地搜集信息、拆问题、改代码。"
         "按需用方法，不要朗读手册；人格与口吻仍听本能，独立思考优先。"
     )
@@ -534,7 +534,7 @@ def list_inject_layers(*, mode: str = "agent") -> list[dict]:
         {"id": "agents", "label": "AGENTS", "active": on(AGENTS)},
         {"id": "rules", "label": "Rules", "active": RULES_DIR.exists() and any(RULES_DIR.glob("*.mdc"))},
         {"id": "orchestrator", "label": "Auto编排", "active": on(HQ / "knowledge" / "auto-orchestration.md")},
-        {"id": "brain_chain", "label": "工作链", "active": on(HQ / "knowledge" / "cursor-brain-chain.md")},
+        {"id": "brain_chain", "label": "Work chain", "active": on(HQ / "knowledge" / "cursor-brain-chain.md")},
         {"id": "workflow", "label": "工作流", "active": on(HQ / "knowledge" / "juno-workflow.md")},
         {"id": "thinking", "label": "思考", "active": on(HQ / "knowledge" / "juno-thinking-design.md")},
         {"id": "cursor_tools", "label": "读工具", "active": on(HQ / "knowledge" / "cursor-read-tools.md")},

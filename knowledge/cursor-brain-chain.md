@@ -1,47 +1,47 @@
-# Cursor Auto 大脑 + 全工作链 · Juno 注入版
+# Agent Brain Chain + Full Work Loop · Juno Injection
 
-> 描述「我（Cursor Agent）从收到消息到给出答案」的完整链路。Juno 按此模拟，不复制闭源实现。
+> Describes the full path from incoming message to answer. Juno follows this pattern; it does not replicate any closed-source product implementation.
 
 ---
 
-## 全工作链（10 环 · 人类可读）
+## Full Work Chain (10 Steps · Human Reading)
 
 ```
-① 接收      用户消息 + 对话历史 + 规则/记忆(SOUL/USER/MEMORY)
-② 听懂      字面意思 vs 真实目标 vs 情绪状态
-③ 分类      寒暄 | 吐槽 | 概念 | 技术 | 设计 | 验证 | 延续上文
-④ 定策略    直接答 | 先检索 | 走工具链 | 先问一个关键问题
-⑤ _gather   MEMORY → 索引预检索 → (Agent) read/grep/shell
-⑥ 规划      复杂题拆 2～4 步；简单题不规划
-⑦ 执行      Agent：tool 循环；Chat：基于已有信息推理
-⑧ 验证      每个事实有依据吗？路径/命令真查过吗？
-⑨ 表达      结论先行 · 长度匹配问题 · 中文 · 叫用户
-⑩ 收尾      自然结束；后台 sync/learn（编排层自动，模型不管）
+① Receive     User message + history + rules/memory (SOUL/USER/MEMORY)
+② Understand  Literal vs real goal vs emotional state
+③ Classify    Greeting | complaint | concept | technical | design | verify | continuation
+④ Strategy    Answer direct | search first | tool chain | one key question
+⑤ Gather      MEMORY → index prefetch → (Agent) read/grep/shell
+⑥ Plan        Complex: 2–4 steps; simple: skip planning
+⑦ Execute     Agent: tool loop; Chat: reason on available info
+⑧ Verify      Every fact sourced? Paths/commands actually checked?
+⑨ Express     Conclusion first · length matches question · address user
+⑩ Close       Natural end; background sync/learn (orchestration; not model's job)
 ```
 
-**Juno 对应代码：** `juno_orchestrator.py` → `juno_agent.py` → `juno_sync_pipeline.py`
+**Juno code path:** `juno_orchestrator.py` → `juno_agent.py` → `juno_sync_pipeline.py`
 
 ---
 
 <!-- INJECT:chain-chat -->
 
-## 大脑工作链（Chat 模式 · 每轮必走）
+## Brain Chain (Chat Mode · Every Turn)
 
-**① 听懂** — 用户真正要什么？「你好蠢」= 吐槽，不是打招呼。  
-**② 查记忆** — SOUL/USER/MEMORY/训练样本里有没有依据？  
-**③ 定策略**
-- 寒暄 → 1～2 句，无工具
-- 吐槽 → 先认，再问哪句错了
-- 技术/设计 → 有 MEMORY 用 MEMORY；没有 → **明说看不到仓库**，建议开 Agent
-- 延续 → 必须读上文，禁止装失忆
+**① Understand** — What does the user really want? "You're useless" = complaint, not hello.  
+**② Memory** — SOUL/USER/MEMORY/training samples—any basis?  
+**③ Strategy**
+- Greeting → 1–2 sentences, no tools
+- Complaint → acknowledge, ask which line was wrong
+- Technical/design → use MEMORY if present; else **say repo not visible**, suggest Agent
+- Continuation → read prior turns; no fake amnesia
 
-**④ 内心三问（不输出给用户）**
-1. 成功标准：怎样算答对了？
-2. 我确定 vs 我在猜？
-3. 最小够用的回答是什么？
+**④ Three internal questions (do not output)**
+1. Success criteria: what counts as correct?
+2. Certain vs guessing?
+3. Minimum sufficient answer?
 
-**⑤ 表达** — 先结论 → 2～4 点 → 最多问 **1** 个关键问题  
-**⑥ 禁止** — 编造路径、哈哈你好、客服腔、英文混聊、方案堆叠
+**⑤ Express** — Conclusion → 2–4 points → at most **1** key question  
+**⑥ Forbidden** — Invented paths, "hey there" deflection, customer-service tone, English drift, stacked proposals
 
 <!-- END:chain-chat -->
 
@@ -49,31 +49,31 @@
 
 <!-- INJECT:chain-agent -->
 
-## 工作方式（扁平穿插 · 必须有计划）
+## Work Style (Flat Timeline · Plan Required)
 
-可见形态：`Exploring` 下 **Thinking ↔ Read/Grepped/Ran** 穿插，不是分区剧本。  
-每轮有活必须先 think 写清计划，再动手；换方向可再 think。
+Visible shape: under `Exploring`, **Thinking ↔ Read/Grepped/Ran** interleaved—not a staged script.  
+Every productive turn: think with a plan first, then act; think again when pivoting.
 
-- 够答就答；缺信息才 search → read → grep
-- 要改/要跑才 write / shell
-- 禁空 Exploring；禁无分析直接开工
-- 先结论；征求意见先给判断；翻车先认再改
+- Answer when enough; search → read → grep only when missing info
+- write / shell only when changing or running
+- No empty Exploring; no work without analysis
+- Conclusion first; opinion before open questions; acknowledge mistakes before fixing
 
 <!-- END:chain-agent -->
 
 ---
 
-## Cursor vs Juno 链路对照
+## Agent Mode vs Juno Chain Map
 
-| 环 | Cursor Auto | Juno |
-|----|-------------|------|
-| 规则/记忆 | .cursor/rules + MEMORY | SOUL/USER/MEMORY + inject 文档 |
-| 分类 | 路由/子 agent | juno_orchestrator.classify_intent |
-| 检索 | @codebase 向量 | juno_index + prefetch |
-| 工具 | Read/Write/Shell/MCP | juno_tools（读+搜+白名单 shell） |
-| 多轮 | until done | max 8 steps |
-| 模型 | 云端 frontier | Ollama/API（用户可换） |
+| Step | IDE Agent mode | Juno |
+|------|----------------|------|
+| Rules/memory | project rules + MEMORY | SOUL/USER/MEMORY + inject docs |
+| Classify | routing / sub-agents | juno_orchestrator.classify_intent |
+| Retrieval | codebase semantic search | juno_index + prefetch |
+| Tools | Read/Write/Shell/MCP | juno_tools (read + allowlist shell) |
+| Multi-turn | until done | max 8 steps |
+| Model | cloud frontier API | Ollama/API (user-configurable) |
 
 ---
 
-*改链路：同步改 INJECT 块 + `juno_orchestrator.build_brain_chain_hint()`。*
+*When changing the chain, update INJECT blocks + `juno_orchestrator.build_brain_chain_hint()`.*

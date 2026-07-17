@@ -1,46 +1,46 @@
-# 首次启动 · Bootstrap
+# First Boot · Bootstrap
 
-欢迎。这是你个人智能体的「出生证」。按顺序做一遍，然后可以删掉本文件。
+Welcome. This is your personal agent's birth certificate. Run through once, then delete this file.
 
-## Step 1 · 给 AI 起名字
+## Step 1 · Name Your AI
 
-打开 **`SOUL.md`**，把 `[你的AI名字]` 改成你想要的名字（例如：Nova、小助、Arc 等）。
+Open **`SOUL.md`** and replace `[Your AI name]` with your choice (e.g. Nova, Arc, Juno).
 
-## Step 2 · 填写 USER.md
+## Step 2 · Fill USER.md
 
-至少填写：
+At minimum:
 
-- 你怎么称呼
-- 常用语言（中文/英文）
-- 你主要用 AI 做什么（3～5 条）
-- 你不希望 AI 做什么（红线）
+- What to call you
+- Preferred language (English / bilingual)
+- Main use cases (3–5 items)
+- What you do **not** want the AI to do (red lines)
 
-## Step 3 · 试跑一句
+## Step 3 · Smoke Test
 
-在新对话输入：
+In a new chat:
 
 ```
 @my-core-agent
 
-你好，读一下 USER.md 和 SOUL.md，用一句话介绍你自己，并问我接下来要配置什么。
+Read USER.md and SOUL.md, introduce yourself in one sentence, and ask what to configure next.
 ```
 
-## Step 4 · 丢第一份资料（可选）
+## Step 4 · First Document (Optional)
 
-复制任意一份你常看的文档到 **`knowledge/`**，然后：
-
-```
-@my-core-agent 读 knowledge/ 里的文件，总结我能拿你做什么
-```
-
-## Step 5 · 记住一件事
+Copy any doc you often reference into **`knowledge/`**, then:
 
 ```
-@my-core-agent 记住：我的智能体项目路径是 Desktop\my-ai-agent
+@my-core-agent Read knowledge/ and summarize what you can help me with
 ```
 
-它会写入 **`MEMORY.md`**。
+## Step 5 · Remember One Thing
+
+```
+@my-core-agent Remember: my agent project path is Desktop\my-ai-agent
+```
+
+It will write to **`MEMORY.md`**.
 
 ---
 
-完成后删除本文件即可。
+Delete this file when done.
