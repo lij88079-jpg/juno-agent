@@ -3,7 +3,7 @@
   "agentNameZh": "朱诺",
   "owner": "",
   "ownerEn": "",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "headquarters": ".",
   "defaultLanguage": "zh-CN",
   "skills": {
@@ -19,6 +19,14 @@
     "longTerm": "MEMORY.md",
     "daily": "memory/daily"
   },
+  "projects": [
+    {
+      "id": "juno-hq",
+      "label": "Juno HQ",
+      "path": ".",
+      "aliases": ["juno", "朱诺", "总部", "my-ai-agent"]
+    }
+  ],
   "index": {
     "enabled": true,
     "topK": 10,
@@ -31,7 +39,7 @@
       {
         "id": "juno-hq",
         "path": ".",
-        "label": "Juno 总部"
+        "label": "Juno HQ"
       }
     ],
     "extraPaths": [
@@ -46,7 +54,8 @@
       "__pycache__",
       ".cursor",
       "mcps",
-      "assets"
+      "assets",
+      "vendor"
     ],
     "ignoreExtensions": [
       ".png",
@@ -64,14 +73,20 @@
       ".mp3",
       ".jsonl"
     ],
-    "maxFileBytes": 524288
+    "maxFileBytes": 2097152
   },
   "tools": {
     "enabled": true,
-    "maxSteps": 24,
-    "maxSubagents": 2,
-    "readPolicy": "sandbox",
-    "broadReadRoots": [],
+    "maxSteps": 40,
+    "maxSubagents": 4,
+    "readPolicy": "broad",
+    "shellPolicy": "open",
+    "broadReadRoots": [
+      "~",
+      "~/Desktop",
+      "~/Documents",
+      "~/Downloads"
+    ],
     "roots": [
       "."
     ],
@@ -128,11 +143,13 @@
     "writeRoots": [
       ".",
       "memory",
-      "knowledge"
+      "knowledge",
+      "__DESKTOP__",
+      "~/Documents/juno-artifacts"
     ],
     "webSearch": {
       "enabled": true,
-      "provider": "duckduckgo"
+      "provider": "auto"
     }
   }
 }

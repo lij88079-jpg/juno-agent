@@ -3,33 +3,31 @@
   "api_base": "http://127.0.0.1:11434",
   "model": "qwen2.5:7b",
   "max_tokens": 4096,
-  "temperature": 0.7,
+  "temperature": 0.62,
+  "agent_backend": "auto",
   "presets": {
-    "ollama": {
-      "label": "Ollama 本地（推荐）",
+    "local": {
+      "label": "Local (Ollama)",
       "provider": "ollama",
       "api_base": "http://127.0.0.1:11434",
-      "model": "qwen2.5:7b"
+      "model": "qwen2.5:7b",
+      "agent_backend": "builtin"
     },
-    "ollama_llama3": {
-      "label": "Ollama · llama3:8b",
-      "provider": "ollama",
-      "api_base": "http://127.0.0.1:11434",
-      "model": "llama3:8b"
+    "cloud": {
+      "label": "Cloud (OpenAI-compatible)",
+      "provider": "openai_compatible",
+      "api_base": "https://api.example.com",
+      "model": "your-model-id",
+      "agent_backend": "builtin",
+      "prompt_mode": "full"
     },
     "lmstudio": {
-      "label": "LM Studio（需先开 Local Server）",
+      "label": "LM Studio",
       "provider": "openai_compatible",
       "api_base": "http://127.0.0.1:1234",
       "model": "local-model",
-      "api_key": "lm-studio"
-    },
-    "deepseek": {
-      "label": "DeepSeek API（官方 · deepseek-chat）",
-      "provider": "openai_compatible",
-      "api_base": "https://api.deepseek.com",
-      "model": "deepseek-chat",
-      "prompt_mode": "full"
+      "api_key": "lm-studio",
+      "agent_backend": "builtin"
     }
   }
 }

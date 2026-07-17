@@ -28,9 +28,12 @@ def _load_config() -> dict:
 
 
 def _merge_cursor_mcp(cfg: dict) -> None:
-    """Merge servers from Cursor ~/.cursor/mcp.json if importCursorMcp set."""
-    import_path = cfg.get("importCursorMcp") or str(Path.home() / ".cursor" / "mcp.json")
-    fp = Path(import_path)
+    """Merge servers from Cursor mcp.json only when importCursorMcp is a non-empty path."""
+    raw = cfg.get("importCursorMcp")
+    if raw is None or not str(raw).strip():
+        return
+    import_path = str(raw).strip()
+    fp = Path(import_path).expanduser()
     if not fp.exists():
         return
     try:

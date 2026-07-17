@@ -8,6 +8,16 @@
       "cwd": ".",
       "enabled": true,
       "timeout": 45
+    },
+    {
+      "id": "extra-mcp",
+      "label": "Optional MCP (disabled)",
+      "command": "cmd",
+      "args": ["/c", "echo", "configure-me"],
+      "cwd": ".",
+      "enabled": false,
+      "timeout": 60,
+      "note": "Add your own MCP server here locally; keep secrets out of git."
     }
   ],
   "importCursorMcp": "",

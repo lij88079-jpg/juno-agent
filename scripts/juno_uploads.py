@@ -106,7 +106,19 @@ def attach_workspace_file(session_id: str, path_str: str) -> dict:
     """Attach a sandbox file or folder by path (drag / @path)."""
     import juno_tools
 
+    juno_tools.set_session_context(session_id)
+    # User explicitly attached → trust before resolve (covers D:/E: outside default broad roots)
+    juno_tools.trust_user_path(path_str)
     fp = juno_tools._smart_resolve(path_str)
+    if not fp:
+        # Last chance: path exists on disk but was blocked — still trust & retry
+        try:
+            raw = Path((path_str or "").strip().strip('"').strip("'"))
+            if raw.is_absolute() and raw.exists():
+                juno_tools.trust_user_path(str(raw))
+                fp = juno_tools._smart_resolve(path_str)
+        except OSError:
+            fp = None
     if not fp:
         return {"ok": False, "error": f"路径不可访问: {path_str}"}
     if fp.is_dir():

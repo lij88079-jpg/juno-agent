@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juno Orb · Video</title>
+  <style>
+    :root { --lx: 0; --ly: 0; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      background: #000; color: #b8b8c4;
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    .layout {
+      display: grid; gap: 1.25rem; justify-items: center;
+      padding: 1.5rem; width: min(720px, 100%);
+    }
+    h1 {
+      margin: 0; font-weight: 500; font-size: .85rem;
+      letter-spacing: .14em; color: #6e6e7a;
+    }
+    .stage {
+      width: min(72vw, 320px); height: min(72vw, 320px);
+      perspective: 1000px; cursor: grab; touch-action: none;
+      position: relative;
+    }
+    .stage:active { cursor: grabbing; }
+    .stage::after {
+      content: "播你的成片：左看 → 回正 → 右看 → 回正 → 微笑（循环）";
+      position: absolute; left: 50%; bottom: -2rem;
+      transform: translateX(-50%); white-space: nowrap;
+      font-size: .68rem; color: #4a4a56; pointer-events: none;
+    }
+    .orb {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      overflow: hidden;
+      position: relative;
+      box-shadow:
+        0 18px 50px rgba(60, 30, 180, .45),
+        inset 0 0 0 1px rgba(255,255,255,.28);
+      background: #000;
+    }
+    .orb video {
+      width: 118%; height: 118%;
+      object-fit: cover;
+      object-position: center;
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .shine {
+      position: absolute; inset: 0; pointer-events: none; border-radius: 50%;
+      background:
+        radial-gradient(ellipse 46% 28% at 28% 18%, rgba(255,255,255,.35), transparent 68%);
+    }
+    .rim {
+      position: absolute; inset: 0; pointer-events: none; border-radius: 50%;
+      box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3), inset 0 0 24px rgba(255,255,255,.06);
+    }
+    .controls { display: flex; gap: .45rem; flex-wrap: wrap; justify-content: center; }
+    .controls button {
+      border: 1px solid #2a2a34; background: #121218; color: #ddd;
+      border-radius: 999px; padding: .4rem .9rem; cursor: pointer; font-size: .76rem;
+    }
+    .note {
+      max-width: 34rem; text-align: center; font-size: .74rem;
+      line-height: 1.55; color: #5c5c68;
+    }
+    .drop {
+      border: 1px dashed #333; border-radius: 12px; padding: .85rem 1rem;
+      font-size: .72rem; color: #7a7a88; text-align: center; width: min(100%, 420px);
+    }
+    .drop strong { color: #bbb; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <h1>JUNO ORB · VIDEO</h1>
+    <div class="stage" id="stage">
+      <div class="orb" id="orb">
+        <video id="vid" autoplay muted loop playsinline>
+          <source src="assets/juno-orb-loop.mp4" type="video/mp4" />
+        </video>
+        <div class="shine"></div>
+        <div class="rim"></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button type="button" id="btnReplay">重播</button>
+      <button type="button" id="btnPause">暂停 / 继续</button>
+    </div>
+    <p class="note">
+      正在播你生成的成片（左→正→右→正→微笑）。CSS 假转头已关掉，避免和视频里的转头打架。
+      不满意可拖入新的 .mp4 替换预览。
+    </p>
+    <div class="drop" id="drop">
+      <strong>拖入 .mp4 / .webm</strong> 替换成你的视频 demo
+    </div>
+  </div>
+  <script>
+    const vid = document.getElementById('vid');
+    const drop = document.getElementById('drop');
+
+    document.getElementById('btnReplay').addEventListener('click', () => {
+      vid.currentTime = 0;
+      vid.play().catch(() => {});
+    });
+    document.getElementById('btnPause').addEventListener('click', () => {
+      if (vid.paused) vid.play().catch(() => {});
+      else vid.pause();
+    });
+
+    function useFile(file) {
+      if (!file || !/^video\//.test(file.type)) return;
+      const url = URL.createObjectURL(file);
+      vid.removeAttribute('src');
+      while (vid.firstChild) vid.removeChild(vid.firstChild);
+      const source = document.createElement('source');
+      source.src = url;
+      source.type = file.type || 'video/mp4';
+      vid.appendChild(source);
+      vid.load();
+      vid.play().catch(() => {});
+      drop.innerHTML = '<strong>已替换：</strong>' + file.name;
+    }
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); });
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      useFile(e.dataTransfer.files[0]);
+    });
+    drop.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = 'video/*';
+      inp.onchange = () => useFile(inp.files[0]);
+      inp.click();
+    });
+
+    vid.play().catch(() => {});
+  </script>
+</body>
+</html>

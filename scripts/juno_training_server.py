@@ -6,20 +6,25 @@ import json
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HQ = Path(__file__).resolve().parent.parent
+BUILD_ID = "2026-07-07-hybrid-cursor"
 UI_STUDIO = HQ / "training" / "studio.html"
 UI_CHAT = HQ / "training" / "chat.html"
+UI_ORB_3D = HQ / "training" / "orb-3d.html"
+UI_ORB_DEMO = HQ / "training" / "orb-demo.html"
 UI_CURSOR_CSS = HQ / "training" / "cursor-ui.css"
 UI_CURSOR_LAYOUT_CSS = HQ / "training" / "cursor-layout.css"
 UI_CURSOR_JS = HQ / "training" / "cursor-ui.js"
 UI_CURSOR_DIFF_JS = HQ / "training" / "cursor-diff-editor.js"
 UI_CURSOR_TERM_JS = HQ / "training" / "cursor-terminal.js"
 UI_CURSOR_CMDK_JS = HQ / "training" / "cursor-cmdk.js"
+UI_ASSETS_DIR = HQ / "training" / "assets"
 TRAINING_FILE = HQ / "training" / "examples.jsonl"
 MEMORY = HQ / "MEMORY.md"
 USER = HQ / "USER.md"
@@ -38,6 +43,7 @@ import juno_capabilities  # noqa: E402
 import juno_skills  # noqa: E402
 import juno_tools  # noqa: E402
 import juno_context  # noqa: E402
+import juno_cursor_agent  # noqa: E402
 
 
 def read_text(p: Path) -> str:
@@ -122,39 +128,35 @@ def build_api_messages(
     user_msg = juno_brain.last_user_message(session)
     prior = juno_brain.dialog_before_current(session.get("messages"), user_msg)
     intent = juno_orchestrator.classify_intent(user_msg, prior or session.get("messages"))
-    compact = juno_brain.is_small_local_model()
     ui_mode = juno_brain.resolve_ui_mode(
         chat_mode=chat_mode, agent_mode=agent_mode, ask_mode=ask_mode, plan_mode=plan_mode
     )
     mode = "agent" if ui_mode != "chat" else "chat"
-    prompt = juno_brain.format_ui_mode_directive(ui_mode) + "\n\n" + juno_brain.build_system_prompt(mode=mode)
-    skill = juno_skills.build_skill_inject(intent, user_msg, compact=compact)
-    hint = juno_brain.scene_directive(
+    prompt = juno_brain.build_system_prompt(mode=mode, ui_mode=ui_mode)
+
+    turn_ctx = juno_brain.build_turn_context(
         user_msg,
+        session.get("messages"),
         agent_mode=agent_mode or ask_mode or plan_mode,
         ui_mode=ui_mode,
-        recent_messages=session.get("messages"),
         session_title=session.get("title") or "",
     )
-    cap = juno_capabilities.capability_directive(user_msg, agent_mode=agent_mode or ask_mode, intent=intent)
-    chain = juno_orchestrator.build_brain_chain_hint(intent, 0)
-    if skill:
-        prompt = prompt + "\n\n" + skill
-    if not agent_mode:
-        orch = juno_orchestrator.load_orchestrator_inject()
-        if orch and not compact:
-            prompt = prompt + "\n\n" + orch
+    if turn_ctx:
+        prompt = prompt + "\n\n" + turn_ctx
+
+    skill_block = juno_skills.build_skill_inject(
+        intent,
+        user_msg,
+        compact=juno_brain.is_small_local_model(),
+    )
+    if skill_block:
+        prompt = prompt + "\n\n" + skill_block
+
     if plan_mode:
-        prompt = prompt + "\n\n## Plan 模式\n只规划不执行 write/str_replace/git/shell；输出分步方案。"
-        plan_caps = juno_capabilities.load_plan_capabilities()
-        if plan_caps:
-            prompt = prompt + "\n\n" + plan_caps
+        prompt = prompt + "\n\nPlan 模式：只规划，不执行 write/shell/git。"
     elif ask_mode:
-        prompt = prompt + "\n\n## Ask 只读模式\n可用 read/search/grep/glob/web_search/read_lints；禁止 write/str_replace/git/shell。"
-    if cap:
-        prompt = prompt + "\n\n## 本轮听说读写\n" + cap
-    if not compact:
-        prompt = prompt + "\n\n" + chain
+        prompt = prompt + "\n\nAsk 模式：只读 search/read/grep，不写文件。"
+
     ctx = juno_context.format_for_prompt()
     if ctx:
         prompt = prompt + "\n\n" + ctx
@@ -173,16 +175,54 @@ def build_api_messages(
         path_pre = juno_orchestrator.prefetch_paths(user_msg)
         if path_pre:
             prompt = prompt + "\n\n" + path_pre
-        ctx2 = juno_index.format_context(user_msg, top_k=10)
+        ctx2 = juno_index.format_context(user_msg, top_k=14)
         if ctx2:
-            prompt = prompt + "\n\n" + ctx2 + "\n\n（检索片段；Chat 模式勿假装已读全文件，可开 Agent/Ask。）"
-    if hint:
-        prompt = prompt + "\n\n" + hint
-    prompt = prompt + "\n\n" + juno_brain.tone_guard_directive(user_msg, intent)
+            prompt = prompt + "\n\n" + ctx2
+
     msgs = [{"role": "system", "content": prompt}]
     for m in session.get("messages") or []:
         if m.get("role") in ("user", "assistant") and m.get("content"):
             msgs.append({"role": m["role"], "content": m["content"]})
+    return msgs
+
+
+def build_cursor_agent_messages(
+    session: dict,
+    *,
+    chat_mode: str = "agent",
+    ask_mode: bool = False,
+    plan_mode: bool = False,
+) -> list[dict]:
+    """Lightweight prompt for Cursor CLI — no index/MCP bleed."""
+    user_msg = juno_brain.last_user_message(session)
+    mode = "agent" if chat_mode != "chat" else "chat"
+    # Keep Cursor CLI prompt lean — long protocol dumps make the model answer meta instead of the user
+    if juno_brain.is_casual_opening(user_msg):
+        prompt = "你是 Juno。用户在打招呼，简短自然回复。"
+    elif juno_brain.needs_agent_execution(user_msg, session.get("messages") or []):
+        prompt = (
+            "你是 Juno，在用户本机用工具完成任务。"
+            "优先完成最后一条用户消息（启动服务/改文件/查仓库）；"
+            "不要复述人设、不要分析 prompt 本身。"
+        )
+        prompt += "\n" + juno_brain.format_ui_mode_directive(chat_mode)[:400]
+    else:
+        prompt = juno_brain.build_system_prompt(mode=mode, ui_mode=chat_mode)[:2200]
+        prompt += (
+            "\n\n这是 Juno 本地聊天窗口。只完成用户最后一条消息；"
+            "不要编造群聊；不要把 System 当成考题。"
+        )
+    if plan_mode:
+        prompt += "\nPlan：只规划，不执行 write/shell。"
+    elif ask_mode:
+        prompt += "\nAsk：只读，不写文件。"
+    attach = juno_uploads.format_attachments_for_prompt(session)
+    if attach:
+        prompt += "\n\n" + attach[:1500]
+    msgs = [{"role": "system", "content": prompt[:3000]}]
+    for m in (session.get("messages") or [])[-8:]:
+        if m.get("role") in ("user", "assistant") and m.get("content"):
+            msgs.append({"role": m["role"], "content": m["content"][:1200]})
     return msgs
 
 
@@ -283,12 +323,43 @@ class Handler(BaseHTTPRequestHandler):
             sid = juno_brain.new_session_id()
             now = datetime.now().isoformat(timespec="seconds")
             session = {"id": sid, "title": (message or "新对话")[:24], "created": now, "updated": now, "messages": []}
+            juno_tools.set_session_context(str(sid))
 
         session.setdefault("messages", [])
         msgs = session["messages"]
         context_paths = data.get("context_paths") or []
         if not isinstance(context_paths, list):
             context_paths = []
+
+        # Claude-style: ended thread cannot accept new messages (new chat still ok)
+        if juno_brain.session_conversation_ended(session):
+            ended_msg = (
+                "本会话已结束。开一个新对话继续即可；"
+                "我不会在已结束的线程里继续陪跑。"
+            )
+            if stream:
+                self._sse_start()
+                self._sse("delta", {"text": ended_msg})
+                self._sse("done", {
+                    "session_id": sid,
+                    "content": ended_msg,
+                    "chat_mode": chat_mode,
+                    "conversation_ended": True,
+                })
+                return
+            self._json(200, {
+                "session_id": sid,
+                "content": ended_msg,
+                "conversation_ended": True,
+            })
+            return
+
+        # User @ / drag / typed absolute paths → trust for this turn (D: etc.)
+        juno_tools.trust_paths_from_turn(
+            context_paths=context_paths,
+            message=message or "",
+            attachments=session.get("attachments") or [],
+        )
 
         if not message and not regenerate:
             has_attach = bool(session.get("attachments"))
@@ -318,10 +389,134 @@ class Handler(BaseHTTPRequestHandler):
             context_paths=context_paths,
         )
         user_msg = message or juno_brain.last_user_message(session)
+        # Chat asking to start/run project → promote to Agent so tools + CoT rail work
+        dialog_pre = session.get("messages") or []
+        if chat_mode == "chat" and juno_brain.needs_agent_execution(user_msg, dialog_pre):
+            chat_mode = "agent"
+            agent_mode = True
+            ask_mode = False
+            plan_mode = False
+            route_agent = True
+        fast = juno_brain.try_fast_meta_reply(user_msg, ui_mode=chat_mode)
+        if not fast:
+            hostile = juno_brain.try_hostile_boundary_reply(user_msg, dialog_pre)
+            if hostile:
+                fast, end_conv = hostile
+                if end_conv:
+                    juno_brain.mark_session_ended(session, reason="persistent_abuse")
+        if fast:
+            now = datetime.now().isoformat(timespec="seconds")
+            ended = juno_brain.session_conversation_ended(session)
+            session["messages"].append({
+                "role": "assistant",
+                "content": fast,
+                "time": now,
+                "mode": chat_mode,
+                "fast": True,
+                **({"boundary": "abuse"} if juno_brain.is_hostile_stance(user_msg) else {}),
+            })
+            session["updated"] = now
+            juno_brain.save_session(session)
+            if stream:
+                self._sse_start()
+                self._sse("delta", {"text": fast})
+                self._sse("done", {
+                    "session_id": sid,
+                    "content": fast,
+                    "chat_mode": chat_mode,
+                    "fast": True,
+                    "conversation_ended": ended,
+                })
+                return
+            self._json(200, {
+                "session_id": sid,
+                "content": fast,
+                "fast": True,
+                "conversation_ended": ended,
+            })
+            return
         dialog = session.get("messages") or []
         extra = [juno_uploads.format_attachments_for_prompt(session)]
 
+        def _finalize_reply(reply: str) -> str:
+            reply = juno_brain.polish_reply(
+                reply, user_msg, ui_mode=chat_mode, prior_messages=dialog,
+            )
+            if juno_brain.reply_should_end_conversation(reply, user_msg, dialog):
+                juno_brain.mark_session_ended(session, reason="persistent_abuse")
+            return reply
+
         if agent_mode:
+            # Always prefer builtin tool loop unless explicitly cursor_agent (not auto ops).
+            # User opted out of Cursor CLI chain — keep Agent CoT local.
+            use_cursor = (
+                juno_brain.agent_backend_policy() == "cursor_agent"
+                and juno_brain.is_agent_cursor_backend()
+                and not juno_brain.needs_agent_execution(user_msg, dialog)
+            )
+            if use_cursor:
+                cursor_msgs = build_cursor_agent_messages(
+                    session,
+                    chat_mode=chat_mode,
+                    ask_mode=ask_mode,
+                    plan_mode=plan_mode,
+                )
+                cli_mode = "ask" if ask_mode else ("plan" if plan_mode else None)
+                cfg = juno_brain.load_chat_config()
+                ws = (HQ / str(cfg.get("workspace") or ".").lstrip("/\\")).resolve()
+                if stream:
+                    self._sse_start()
+                    full = []
+                    tool_trace: list[dict] = []
+                    try:
+                        self._sse("status", {"phase": "cursor-agent"})
+                        for ev in juno_cursor_agent.chat_stream_events(
+                            cursor_msgs, user_message=user_msg, workspace=ws, cli_mode=cli_mode
+                        ):
+                            et = ev.get("type")
+                            if et == "delta":
+                                t = ev.get("text") or ""
+                                full.append(t)
+                                self._sse("delta", {"text": t})
+                            elif et in ("plan", "prefetch", "tool", "thinking_delta", "thinking", "subagent", "chain"):
+                                if et == "tool" and ev.get("phase") == "done":
+                                    tool_trace.append(ev)
+                                self._sse(et, ev)
+                        reply = _finalize_reply("".join(full))
+                        session["messages"].append({
+                            "role": "assistant",
+                            "content": reply,
+                            "time": datetime.now().isoformat(timespec="seconds"),
+                            "mode": chat_mode,
+                            "backend": "cursor_agent",
+                            "trace": tool_trace,
+                        })
+                        session["updated"] = datetime.now().isoformat(timespec="seconds")
+                        juno_brain.save_session(session)
+                        schedule_post_chat_sync(sid)
+                        self._sse("done", {
+                            "session_id": sid,
+                            "content": reply,
+                            "syncing": True,
+                            "agent": True,
+                            "backend": "cursor_agent",
+                            "chat_mode": chat_mode,
+                            "trace": tool_trace,
+                        })
+                    except Exception as e:
+                        self._sse("error", {"message": str(e)})
+                    return
+                reply, _usage = juno_cursor_agent.chat_complete(
+                    cursor_msgs, user_message=user_msg, workspace=ws, cli_mode=cli_mode
+                )
+                reply = _finalize_reply(reply)
+                session["messages"].append({"role": "assistant", "content": reply, "time": datetime.now().isoformat(timespec="seconds"), "backend": "cursor_agent"})
+                session["updated"] = datetime.now().isoformat(timespec="seconds")
+                juno_brain.save_session(session)
+                schedule_post_chat_sync(sid)
+                self._json(200, {"session_id": sid, "content": reply, "agent": True, "backend": "cursor_agent", "syncing": True})
+                return
+            # builtin Agent path (ops + fallback)
             if stream:
                 self._sse_start()
                 full = []
@@ -343,7 +538,7 @@ class Handler(BaseHTTPRequestHandler):
                             t = ev.get("text") or ""
                             full.append(t)
                             self._sse("delta", {"text": t})
-                        elif et in ("chain", "plan", "prefetch", "tool", "thinking_delta", "subagent"):
+                        elif et in ("chain", "plan", "prefetch", "tool", "thinking_delta", "thinking", "subagent"):
                             if et == "tool" and ev.get("phase") == "done":
                                 tool_trace.append(ev)
                             self._sse(et, ev)
@@ -351,7 +546,7 @@ class Handler(BaseHTTPRequestHandler):
                             if ev.get("trace"):
                                 tool_trace = ev.get("trace") or tool_trace
                     reply = "".join(full)
-                    reply = juno_brain.polish_reply_if_snark(reply, user_msg)
+                    reply = _finalize_reply(reply)
                     session["messages"].append({
                         "role": "assistant",
                         "content": reply,
@@ -362,7 +557,7 @@ class Handler(BaseHTTPRequestHandler):
                     session["updated"] = datetime.now().isoformat(timespec="seconds")
                     juno_brain.save_session(session)
                     schedule_post_chat_sync(sid)
-                    self._sse("done", {"session_id": sid, "content": reply, "syncing": True, "agent": True, "ask": ask_mode, "plan": plan_mode, "chat_mode": chat_mode, "trace": tool_trace})
+                    self._sse("done", {"session_id": sid, "content": reply, "syncing": True, "agent": True, "ask": ask_mode, "plan": plan_mode, "chat_mode": chat_mode, "trace": tool_trace, "conversation_ended": juno_brain.session_conversation_ended(session)})
                 except Exception as e:
                     self._sse("error", {"message": str(e)})
                 return
@@ -376,7 +571,7 @@ class Handler(BaseHTTPRequestHandler):
                 context_paths=context_paths,
                 session_title=session.get("title") or "",
             )
-            reply = juno_brain.polish_reply_if_snark(reply, user_msg)
+            reply = _finalize_reply(reply)
             session["messages"].append({"role": "assistant", "content": reply, "time": datetime.now().isoformat(timespec="seconds")})
             session["updated"] = datetime.now().isoformat(timespec="seconds")
             juno_brain.save_session(session)
@@ -384,23 +579,177 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"session_id": sid, "content": reply, "agent": True, "trace": trace, "syncing": True})
             return
 
+        cfg_ws = juno_brain.load_chat_config()
+        ws = (HQ / str(cfg_ws.get("workspace") or ".").lstrip("/\\")).resolve()
+
+        if juno_brain.is_chat_cursor_backend():
+            cursor_msgs = build_cursor_agent_messages(session, chat_mode="chat")
+            if stream:
+                self._sse_start()
+                full = []
+                try:
+                    self._sse("status", {"phase": "cursor-agent"})
+                    for chunk in juno_cursor_agent.chat_stream(
+                        cursor_msgs, user_message=user_msg, workspace=ws, cli_mode="ask"
+                    ):
+                        if not full:
+                            self._sse("status", {"phase": "streaming"})
+                        full.append(chunk)
+                        self._sse("delta", {"text": chunk})
+                    reply = _finalize_reply("".join(full))
+                    session["messages"].append({
+                        "role": "assistant",
+                        "content": reply,
+                        "time": datetime.now().isoformat(timespec="seconds"),
+                        "mode": chat_mode,
+                        "backend": "cursor_agent",
+                    })
+                    session["updated"] = datetime.now().isoformat(timespec="seconds")
+                    juno_brain.save_session(session)
+                    schedule_post_chat_sync(sid)
+                    self._sse("done", {"session_id": sid, "content": reply, "syncing": True, "chat_mode": chat_mode, "backend": "cursor_agent"})
+                except Exception as e:
+                    self._sse("error", {"message": str(e)})
+                return
+            reply, _usage = juno_cursor_agent.chat_complete(
+                cursor_msgs, user_message=user_msg, workspace=ws, cli_mode="ask"
+            )
+            reply = _finalize_reply(reply)
+            session["messages"].append({
+                "role": "assistant",
+                "content": reply,
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "backend": "cursor_agent",
+            })
+            session["updated"] = datetime.now().isoformat(timespec="seconds")
+            juno_brain.save_session(session)
+            schedule_post_chat_sync(sid)
+            self._json(200, {"session_id": sid, "content": reply, "syncing": True, "backend": "cursor_agent"})
+            return
+
+        # Situational / choice questions: force think-before-answer in Chat
+        deliberate = (
+            chat_mode == "chat"
+            and juno_brain.needs_deliberation(user_msg, dialog)
+            and juno_brain.supports_native_tools()
+        )
+        if deliberate:
+            # juno_agent already imported at module level — local import here
+            # makes Python treat it as unbound for the whole handler (Agent 先崩).
+            if stream:
+                self._sse_start()
+                try:
+                    self._sse("status", {"phase": "thinking"})
+                    reply_parts: list[str] = []
+                    reply = ""
+                    trace: list = []
+                    for ev in juno_agent.run_deliberate_chat_stream_events(
+                        dialog,
+                        user_message=user_msg,
+                        session_title=session.get("title") or "",
+                        extra_system=[x for x in extra if x],
+                    ):
+                        et = ev.get("type")
+                        if et in ("tool", "thinking", "thinking_delta", "plan"):
+                            self._sse(et, {
+                                "id": ev.get("id"),
+                                "name": ev.get("name"),
+                                "label": ev.get("label") or "Thinking",
+                                "phase": ev.get("phase") or "done",
+                                "state": ev.get("state") or "done",
+                                "text": ev.get("text") or "",
+                                "args": ev.get("args"),
+                                "elapsed_ms": ev.get("elapsed_ms"),
+                            })
+                        elif et == "delta" and ev.get("text"):
+                            if not reply_parts:
+                                self._sse("status", {"phase": "streaming"})
+                            reply_parts.append(ev["text"])
+                            self._sse("delta", {"text": ev["text"]})
+                        elif et == "done":
+                            reply = ev.get("content") or "".join(reply_parts)
+                            trace = ev.get("trace") or []
+                    if not reply:
+                        reply = "".join(reply_parts)
+                    reply = _finalize_reply(reply)
+                    session["messages"].append({
+                        "role": "assistant",
+                        "content": reply,
+                        "time": datetime.now().isoformat(timespec="seconds"),
+                        "mode": chat_mode,
+                        "deliberate": True,
+                        "trace": trace,
+                    })
+                    session["updated"] = datetime.now().isoformat(timespec="seconds")
+                    juno_brain.save_session(session)
+                    schedule_post_chat_sync(sid)
+                    self._sse("done", {
+                        "session_id": sid,
+                        "content": reply,
+                        "syncing": True,
+                        "chat_mode": chat_mode,
+                        "deliberate": True,
+                        "trace": trace,
+                        "conversation_ended": juno_brain.session_conversation_ended(session),
+                    })
+                except Exception as e:
+                    self._sse("error", {"message": str(e)})
+                return
+            reply, trace = juno_agent.run_deliberate_chat_turn(
+                dialog,
+                user_message=user_msg,
+                session_title=session.get("title") or "",
+                extra_system=[x for x in extra if x],
+            )
+            session["messages"].append({
+                "role": "assistant",
+                "content": reply,
+                "time": datetime.now().isoformat(timespec="seconds"),
+                "deliberate": True,
+                "trace": trace,
+            })
+            session["updated"] = datetime.now().isoformat(timespec="seconds")
+            juno_brain.save_session(session)
+            schedule_post_chat_sync(sid)
+            self._json(200, {
+                "session_id": sid,
+                "content": reply,
+                "deliberate": True,
+                "trace": trace,
+                "syncing": True,
+            })
+            return
+
         if stream:
             self._sse_start()
             full = []
+            t0 = time.time()
             try:
-                if chat_mode != "chat":
-                    self._sse("plan", {"id": "plan-main", "label": "Planning next moves", "state": "active"})
+                if juno_brain.is_chat_cursor_backend() or juno_brain.is_cursor_agent():
+                    self._sse("status", {"phase": "cursor-agent"})
+                else:
+                    self._sse("plan", {
+                        "id": "plan-thinking",
+                        "label": "Thinking",
+                        "state": "active",
+                        "started_ms": int(t0 * 1000),
+                    })
                 self._sse("status", {"phase": "thinking"})
                 for chunk in juno_brain.chat_stream(api_messages, user_message=user_msg):
-                    if not full and chat_mode != "chat":
+                    if not full:
+                        elapsed_ms = int((time.time() - t0) * 1000)
+                        self._sse("plan", {
+                            "id": "thought-summary",
+                            "label": f"Thought for {max(1, elapsed_ms // 1000)}s",
+                            "state": "done",
+                            "elapsed_ms": elapsed_ms,
+                        })
                         self._sse("plan", {"label": "Generating answer", "state": "done"})
-                        self._sse("status", {"phase": "streaming"})
-                    elif not full and chat_mode == "chat":
                         self._sse("status", {"phase": "streaming"})
                     full.append(chunk)
                     self._sse("delta", {"text": chunk})
                 reply = "".join(full)
-                reply = juno_brain.polish_reply_if_snark(reply, user_msg)
+                reply = _finalize_reply(reply)
                 session["messages"].append({
                     "role": "assistant",
                     "content": reply,
@@ -410,18 +759,18 @@ class Handler(BaseHTTPRequestHandler):
                 session["updated"] = datetime.now().isoformat(timespec="seconds")
                 juno_brain.save_session(session)
                 schedule_post_chat_sync(sid)
-                self._sse("done", {"session_id": sid, "content": reply, "syncing": True, "chat_mode": chat_mode})
+                self._sse("done", {"session_id": sid, "content": reply, "syncing": True, "chat_mode": chat_mode, "conversation_ended": juno_brain.session_conversation_ended(session)})
             except Exception as e:
                 self._sse("error", {"message": str(e)})
             return
 
         reply, usage = juno_brain.chat_complete(api_messages, user_message=user_msg)
-        reply = juno_brain.polish_reply_if_snark(reply, user_msg)
+        reply = _finalize_reply(reply)
         session["messages"].append({"role": "assistant", "content": reply, "time": datetime.now().isoformat(timespec="seconds")})
         session["updated"] = datetime.now().isoformat(timespec="seconds")
         juno_brain.save_session(session)
         schedule_post_chat_sync(sid)
-        self._json(200, {"session_id": sid, "content": reply, "usage": usage, "syncing": True})
+        self._json(200, {"session_id": sid, "content": reply, "usage": usage, "syncing": True, "conversation_ended": juno_brain.session_conversation_ended(session)})
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -438,6 +787,12 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/chat", "/chat.html"):
             serve_html(self, UI_CHAT)
+            return
+        if path in ("/orb-3d", "/orb-3d.html"):
+            serve_html(self, UI_ORB_3D)
+            return
+        if path in ("/orb-demo", "/orb-demo.html"):
+            serve_html(self, UI_ORB_DEMO)
             return
         if path == "/cursor-ui.css":
             serve_static(self, UI_CURSOR_CSS, "text/css; charset=utf-8")
@@ -457,6 +812,36 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/cursor-cmdk.js":
             serve_static(self, UI_CURSOR_CMDK_JS, "application/javascript; charset=utf-8")
             return
+        if path.startswith("/assets/"):
+            rel = urllib.parse.unquote(path[len("/assets/"):]).lstrip("/")
+            if rel and ".." not in rel.replace("\\", "/"):
+                fp = (UI_ASSETS_DIR / rel).resolve()
+                try:
+                    fp.relative_to(UI_ASSETS_DIR.resolve())
+                except ValueError:
+                    pass
+                else:
+                    if fp.is_file():
+                        ext = fp.suffix.lower()
+                        if ext == ".png":
+                            ctype = "image/png"
+                        elif ext == ".svg":
+                            ctype = "image/svg+xml; charset=utf-8"
+                        elif ext in (".jpg", ".jpeg"):
+                            ctype = "image/jpeg"
+                        elif ext == ".webp":
+                            ctype = "image/webp"
+                        elif ext == ".gif":
+                            ctype = "image/gif"
+                        elif ext == ".mp4":
+                            ctype = "video/mp4"
+                        elif ext == ".webm":
+                            ctype = "video/webm"
+                        else:
+                            ctype = "application/octet-stream"
+                        serve_static(self, fp, ctype)
+                        return
+            return
 
         if path == "/api/status":
             state = json.loads(STATE.read_text(encoding="utf-8")) if STATE.exists() else {}
@@ -474,6 +859,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/chat/status":
             st = juno_brain.chat_status()
+            st["build"] = BUILD_ID
+            st["chat_backend"] = juno_brain.load_chat_config().get("chat_backend") or ""
             sync_st = load_sync_state()
             st["last_sync"] = sync_st.get("last_sync")
             st["last_juno_sync"] = sync_st.get("last_juno_sync")
@@ -865,8 +1252,25 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    def _cursor_boot() -> None:
+        try:
+            if not juno_brain.is_agent_cursor_backend() and not juno_brain.is_chat_cursor_backend():
+                return
+            import cursor_account_pool as pool
+
+            r = pool.ensure_agent_ready(probe=False, silent=True)
+            if r.get("ok"):
+                print(f"Cursor Agent 自检 OK ({r.get('via')}, {r.get('active') or '-'})")
+            else:
+                print(f"Cursor Agent 待配置: {r.get('message', '未登录')}")
+                print("  一键修复: python scripts/cursor-account.py auto")
+        except Exception as e:
+            print(f"Cursor 自检跳过: {e}")
+
+    threading.Thread(target=_cursor_boot, daemon=True).start()
     print(f"Juno Chat:    http://127.0.0.1:{PORT}/chat")
     print(f"Juno Studio:  http://127.0.0.1:{PORT}/studio")
+    print(f"Juno Orb 3D:  http://127.0.0.1:{PORT}/orb-3d")
     print(f"HQ: {HQ}")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
 

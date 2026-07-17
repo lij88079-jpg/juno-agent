@@ -8,13 +8,18 @@ from pathlib import Path
 
 HQ = Path(__file__).resolve().parent.parent
 PROFILE = HQ / "config" / "agent-profile.json"
+CC_SKILLS_CFG = HQ / "config" / "cc-skills.json"
 SKILLS_DIR = HQ / ".cursor" / "skills"
 RULES_DIR = HQ / ".cursor" / "rules"
 AGENTS = HQ / "AGENTS.md"
 USER_RULES = HQ / "knowledge" / "juno-user-rules.md"
 
 EXPLICIT_SKILL_RE = re.compile(
-    r"@(?:my-core-agent|agent-(?:chat|research|writing|coding|memory))\b",
+    r"@(?:my-core-agent|agent-(?:chat|research|writing|coding|memory)|"
+    r"pr-review-expert|focused-fix|codebase-onboarding|spec-driven-workflow|"
+    r"deep-research|doc-coauthoring|frontend-design|mcp-builder|"
+    r"skill-creator|internal-comms|webapp-testing|web-artifacts-builder|"
+    r"pdf|docx|pptx|xlsx|sequential-thinking|information-inventory|chat-visuals)\b",
     re.I,
 )
 MEMORY_RE = re.compile(
@@ -35,6 +40,7 @@ GIT_COMMIT_RE = re.compile(r"git\s+commit|提交代码|帮我提交|create\s+com
 INTENT_TO_SKILL = {
     "casual": "agent-chat",
     "frustrated": "agent-chat",
+    "hostile": "agent-chat",
     "general": "agent-chat",
     "chat": "agent-chat",
     "research": "agent-research",
@@ -46,6 +52,115 @@ INTENT_TO_SKILL = {
     "file": "agent-coding",
     "memory": "agent-memory",
 }
+
+CC_SKILL_CLIP = {
+    "deep-research": 1600,
+    "pr-review-expert": 1400,
+    "focused-fix": 1500,
+    "spec-driven-workflow": 1400,
+    "codebase-onboarding": 1400,
+    "doc-coauthoring": 1300,
+    "frontend-design": 1200,
+    "mcp-builder": 1300,
+    "skill-creator": 1300,
+    "internal-comms": 1100,
+    "webapp-testing": 1200,
+    "web-artifacts-builder": 1200,
+    "pdf": 1200,
+    "docx": 1200,
+    "pptx": 1200,
+    "xlsx": 1200,
+    "sequential-thinking": 900,
+    "information-inventory": 900,
+    "chat-visuals": 900,
+}
+DEFAULT_CC_CLIP = 1400
+DEFAULT_NATIVE_CLIP = 1000
+NATIVE_SKILL_CLIP = {
+    "agent-chat": 0,  # tone lives in instinct — never auto-dump chat craft
+    "agent-research": 1200,
+    "agent-writing": 1100,
+    "agent-coding": 1300,
+    "agent-memory": 900,
+}
+
+# Idle chat/identity: DS + instinct. Work intents get capability playbooks.
+LIGHT_INTENTS_NO_SKILL = frozenset({
+    "meta", "casual", "frustrated", "hostile", "general",
+})
+
+
+def load_cc_manifest() -> dict:
+    if not CC_SKILLS_CFG.exists():
+        return {"imports": [], "fallback": dict(INTENT_TO_SKILL)}
+    try:
+        return json.loads(CC_SKILLS_CFG.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"imports": [], "fallback": dict(INTENT_TO_SKILL)}
+
+
+def cc_skill_entries() -> list[dict]:
+    return list(load_cc_manifest().get("imports") or [])
+
+
+def fallback_skill_for_intent(intent: str) -> str:
+    fb = load_cc_manifest().get("fallback") or {}
+    return fb.get(intent) or INTENT_TO_SKILL.get(intent, "agent-chat")
+
+
+def _keyword_score(text: str, keywords: list[str]) -> int:
+    t = (text or "").lower()
+    score = 0
+    for kw in keywords:
+        k = (kw or "").strip().lower()
+        if k and k in t:
+            score += 2 if len(k) > 4 else 1
+    return score
+
+
+def resolve_skill_id(intent: str, user_message: str = "") -> str:
+    """Pick one skill: explicit @ > keyword CC match > intent CC > Juno fallback."""
+    explicit = detect_explicit_skill(user_message)
+    if explicit:
+        return explicit
+
+    msg = user_message or ""
+    best_id = ""
+    best_score = 0
+    for entry in cc_skill_entries():
+        sid = entry.get("id") or ""
+        if not sid or not _skill_path(sid):
+            continue
+        intents = entry.get("intents") or []
+        keywords = entry.get("keywords") or []
+        score = _keyword_score(msg, keywords)
+        if intent in intents:
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_id = sid
+
+    # intent(+1)+keyword(+1) must beat intent-only first-match (pr-review before focused-fix)
+    if best_score >= 2 and best_id:
+        return best_id
+
+    # Intent-only: prefer native coding/research fallbacks over first CC import
+    if intent in ("technical", "coding", "shell", "file", "design"):
+        fb = fallback_skill_for_intent(intent)
+        if fb and _skill_path(fb):
+            return fb
+    if intent == "research":
+        for sid in ("deep-research", "agent-research"):
+            if _skill_path(sid):
+                return sid
+
+    for entry in cc_skill_entries():
+        sid = entry.get("id") or ""
+        intents = entry.get("intents") or []
+        if sid and intent in intents and _skill_path(sid):
+            return sid
+
+    return fallback_skill_for_intent(intent)
 
 
 def load_profile() -> dict:
@@ -86,21 +201,69 @@ def load_skill_body(skill_id: str) -> str:
     fp = _skill_path(skill_id)
     if not fp:
         return ""
-    return _strip_frontmatter(fp.read_text(encoding="utf-8"))
+    body = _strip_frontmatter(fp.read_text(encoding="utf-8"))
+    # Optional Juno overlay (keeps upstream SKILL.md intact)
+    juno = fp.parent / "JUNO.md"
+    if juno.is_file():
+        extra = juno.read_text(encoding="utf-8").strip()
+        if extra:
+            body = f"{body}\n\n---\n## Juno 适配\n\n{extra}"
+    return body
 
 
 def detect_explicit_skill(user_message: str) -> str | None:
     m = EXPLICIT_SKILL_RE.search(user_message or "")
-    if not m:
-        return None
-    tag = m.group(0).lower().lstrip("@")
-    if tag == "my-core-agent":
-        return "my-core-agent"
-    return tag
+    if m:
+        tag = m.group(0).lower().lstrip("@")
+        if _skill_path(tag):
+            return tag
+    for m in re.finditer(r"@([\w-]+)", user_message or ""):
+        sid = m.group(1).lower()
+        if _skill_path(sid):
+            return sid
+    return None
 
 
-def skill_for_intent(intent: str) -> str:
-    return INTENT_TO_SKILL.get(intent, "agent-chat")
+def skill_for_intent(intent: str, user_message: str = "") -> str:
+    return resolve_skill_id(intent, user_message)
+
+
+def _cc_keywords_for(skill_id: str) -> list[str]:
+    for entry in cc_skill_entries():
+        if entry.get("id") == skill_id:
+            return list(entry.get("keywords") or [])
+    return []
+
+
+def load_skill_assist(skill_id: str, *, explicit: bool = False) -> str:
+    """Capability tip — JUNO.md first; full SKILL when user @-mentions.
+
+    Purpose: raise research/debug/code quality (GPT/Claude-style workflows),
+    not stew the prompt on every casual turn.
+    """
+    sid = (skill_id or "").replace("@", "").strip()
+    if not sid:
+        return ""
+    root = SKILLS_DIR / sid
+    if sid == "my-core-agent":
+        root = next(
+            (p.parent for p in (
+                SKILLS_DIR / "my-core-agent" / "SKILL.md",
+                SKILLS_DIR / "my-core-agent" / "my-core-agent" / "SKILL.md",
+            ) if p.exists()),
+            root,
+        )
+    juno = root / "JUNO.md"
+    skill = root / "SKILL.md"
+    if not skill.exists() and sid == "my-core-agent":
+        return ""
+    if explicit:
+        return load_skill_body(sid)
+    if juno.is_file():
+        return juno.read_text(encoding="utf-8").strip()
+    if skill.is_file():
+        return _clip(_strip_frontmatter(skill.read_text(encoding="utf-8")), 900)
+    return ""
 
 
 def build_skill_inject(
@@ -109,24 +272,95 @@ def build_skill_inject(
     *,
     compact: bool = False,
 ) -> str:
-    """Return skill block for current intent (explicit @ wins)."""
+    """Capability assist for hard turns — gather info, reason thoroughly, then act.
+
+    Like GPT/Claude advanced workflows: raise the floor on research / debug / code.
+    NOT a chat personality script. Light identity/hi turns get nothing.
+    """
     explicit = detect_explicit_skill(user_message)
-    skill_id = explicit or skill_for_intent(intent)
-    body = load_skill_body(skill_id)
+    # Chat / identity: DS + instinct only
+    if not explicit and intent in LIGHT_INTENTS_NO_SKILL:
+        return ""
+
+    skill_id = resolve_skill_id(intent, user_message)
+    # agent-chat must never auto-inject (redundant personality soup)
+    if not explicit and skill_id == "agent-chat":
+        return ""
+
+    body = load_skill_assist(skill_id, explicit=bool(explicit))
     if not body:
         return ""
 
-    if compact:
-        body = _clip(body, 900)
-        header = f"## 当前 Skill · {skill_id}（精简）"
+    is_cc = skill_id in {e.get("id") for e in cc_skill_entries()}
+    if explicit:
+        if compact:
+            limit = 1600 if is_cc else 1200
+        elif is_cc:
+            limit = min(CC_SKILL_CLIP.get(skill_id, DEFAULT_CC_CLIP) * 2, 3200)
+        else:
+            limit = min(max(NATIVE_SKILL_CLIP.get(skill_id, DEFAULT_NATIVE_CLIP), 800) * 2, 2400)
+        header = f"## 能力辅助 · {skill_id}（用户明确 @）"
     else:
-        body = _clip(body, 4500)
-        header = f"## 当前 Skill · {skill_id}"
+        if compact:
+            limit = 900 if is_cc else 700
+        elif is_cc:
+            limit = CC_SKILL_CLIP.get(skill_id, DEFAULT_CC_CLIP)
+        else:
+            limit = NATIVE_SKILL_CLIP.get(skill_id, DEFAULT_NATIVE_CLIP) or DEFAULT_NATIVE_CLIP
+        header = f"## 能力辅助 · {skill_id}"
+
+    body = _clip(body, limit)
+    frame = (
+        "\n\n**【用法】**这是 GPT/Claude 那类**高级工作流**压缩版："
+        "帮你更全面地搜集信息、拆问题、改代码。"
+        "按需用方法，不要朗读手册；人格与口吻仍听本能，独立思考优先。"
+    )
 
     if GIT_COMMIT_RE.search(user_message or "") and intent in ("shell", "coding", "technical"):
-        body += "\n\n### Git 提交提醒\n用户可能要 commit → 先 status/diff/log，仅用户明确要求才 commit。"
+        body += "\n\n### Git\n用户可能要 commit → 先 status/diff/log，仅明确要求才 commit。"
 
-    return f"{header}\n\n{body}"
+    out = f"{header}\n\n{body}{frame}"
+
+    viz_kws = _cc_keywords_for("chat-visuals")
+    viz_hit = bool(
+        viz_kws
+        and (
+            _keyword_score(user_message, viz_kws) >= 1
+            or re.search(r"画(一张|个|一下)?|详解图|示意图|结构图|流程图|架构图|思维导图", user_message or "")
+        )
+    )
+    if skill_id != "chat-visuals" and viz_hit:
+        viz = load_skill_assist("chat-visuals", explicit=False)
+        if viz:
+            out += (
+                "\n\n## 能力辅助 · chat-visuals\n\n"
+                + _clip(viz, 700 if compact else 1000)
+                + "\n\n要图时答复须含可渲染 ```mermaid / ```chart；查清再画，别只口头形容。"
+            )
+    return out
+
+
+def format_deliberation_skills(
+    *,
+    allow_other_tools: bool = False,
+    compact: bool = False,
+) -> str:
+    """Capability assist for situational/trade-off turns — fuller thinking, not scripts."""
+    parts: list[str] = [
+        "## 能力辅助 · 想得更全面\n"
+        "情景/二选一/多约束：先盘点事实·约束·未知·成功标准，再结论。"
+        "目标是想周全，不是背 skill 原文给用户。"
+    ]
+    lim = 600 if compact else 900
+    for sid in ("information-inventory", "sequential-thinking"):
+        tip = load_skill_assist(sid, explicit=False)
+        if tip:
+            parts.append(f"### {sid}\n" + _clip(tip, lim))
+    if allow_other_tools:
+        parts.append(
+            "有工具时：需要可先 `think`，再搜集/验证，最后动手；不要对用户朗读草稿。"
+        )
+    return "\n\n".join(parts)
 
 
 def _load_inject_block(doc: Path, tag: str) -> str:
@@ -258,10 +492,24 @@ def build_workspace_protocol(*, compact: bool = False, mode: str = "chat") -> st
 def list_skills() -> list[dict]:
     cfg = load_profile()
     mapping = cfg.get("skills") or {}
-    items = []
+    seen: set[str] = set()
+    items: list[dict] = []
     for key, sid in mapping.items():
         fp = _skill_path(sid)
-        items.append({"id": sid, "role": key, "loaded": bool(fp)})
+        seen.add(sid)
+        items.append({"id": sid, "role": key, "loaded": bool(fp), "source": "juno"})
+    for entry in cc_skill_entries():
+        sid = entry.get("id") or ""
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        items.append({
+            "id": sid,
+            "role": "cc",
+            "loaded": bool(_skill_path(sid)),
+            "source": "cc-skills",
+            "intents": entry.get("intents") or [],
+        })
     return items
 
 
@@ -296,5 +544,6 @@ def list_inject_layers(*, mode: str = "agent") -> list[dict]:
         {"id": "index", "label": "索引", "active": bool(idx.get("chunks")), "detail": str(idx.get("chunks") or 0)},
         {"id": "ide_ctx", "label": "IDE", "active": ide_on},
         {"id": "mcp", "label": "MCP", "active": mcp_on},
+        {"id": "skill", "label": "Skill", "active": SKILLS_DIR.exists() and any(SKILLS_DIR.glob("*/SKILL.md"))},
         {"id": "plan", "label": "Plan块", "active": bool(_load_inject_block(HQ / "knowledge" / "juno-capabilities.md", "full-plan"))},
     ]

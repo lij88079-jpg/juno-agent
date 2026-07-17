@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juno Orb · True 3D</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: #000; color: #b8b8c4;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      display: grid; place-items: center; overflow: hidden;
+    }
+    .layout {
+      display: grid; gap: 1rem; justify-items: center;
+      padding: 1.25rem; width: min(980px, 100%);
+    }
+    h1 { margin: 0; font-weight: 500; font-size: .85rem; letter-spacing: .14em; color: #6e6e7a; }
+    .row {
+      display: grid; grid-template-columns: 200px 1fr;
+      gap: 1.25rem; width: 100%; align-items: center;
+    }
+    @media (max-width: 780px) { .row { grid-template-columns: 1fr; } }
+    .label { font-size: .7rem; letter-spacing: .1em; color: #5a5a66; margin-bottom: .5rem; text-align: center; }
+    .ref {
+      width: 180px; height: 180px; border-radius: 50%; object-fit: cover;
+      display: block; margin: 0 auto; box-shadow: 0 0 0 1px rgba(255,255,255,.06);
+    }
+    #stage {
+      width: 100%; height: min(58vh, 440px); border-radius: 14px; background: #000;
+      cursor: grab; touch-action: none; position: relative; overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+    }
+    #stage:active { cursor: grabbing; }
+    #stage canvas { display: block; width: 100% !important; height: 100% !important; }
+    .hint {
+      position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%);
+      font-size: .66rem; color: #4a4a56; pointer-events: none; white-space: nowrap;
+    }
+    .controls { display: flex; gap: .45rem; flex-wrap: wrap; justify-content: center; }
+    .controls button {
+      border: 1px solid #2a2a34; background: #121218; color: #ddd;
+      border-radius: 999px; padding: .38rem .9rem; cursor: pointer; font-size: .76rem;
+    }
+    .controls button.on { border-color: #7a5cff; background: #1a1630; color: #fff; }
+    .note { max-width: 40rem; text-align: center; font-size: .72rem; line-height: 1.5; color: #5c5c68; }
+    .err { color: #ff8a70; font-size: .8rem; text-align: center; display: none; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <h1>JUNO ORB · TRUE 3D</h1>
+    <div class="row">
+      <div>
+        <div class="label">你的参考图</div>
+        <img class="ref" src="assets/juno-orb-ref.png" alt="reference" />
+      </div>
+      <div>
+        <div class="label">WebGL · 重做后（竖眼 + 丝带 + 玻璃边）</div>
+        <div id="stage"><span class="hint">移动鼠标转头</span></div>
+      </div>
+    </div>
+    <div class="controls">
+      <button type="button" data-look="-1,0">← 左转</button>
+      <button type="button" data-look="0,0">正视</button>
+      <button type="button" data-look="1,0">右转 →</button>
+      <button type="button" class="on" data-m="idle">Idle</button>
+      <button type="button" data-m="thinking">Thinking</button>
+      <button type="button" data-m="speaking">Speaking</button>
+    </div>
+    <p class="note">上一版透射材质几乎没生效，看着像暗紫实心球——确实不是一回事。这一版改为：亮极光内核 + Fresnel 玻璃壳 + 竖直胶囊眼。</p>
+    <p class="err" id="err"></p>
+  </div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+
+    const stage = document.getElementById('stage');
+    const errEl = document.getElementById('err');
+    let mode = 'idle';
+    let targetLX = 0, targetLY = 0, curLX = 0, curLY = 0;
+    let tracking = false;
+    let energy = 1;
+
+    const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+    try {
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setClearColor(0x000000, 1);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.35;
+      stage.prepend(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
+      camera.position.set(0, 0, 3.85);
+
+      const root = new THREE.Group();
+      scene.add(root);
+
+      scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+      const L1 = new THREE.DirectionalLight(0xffffff, 1.1);
+      L1.position.set(-2.5, 3, 4);
+      scene.add(L1);
+      const L2 = new THREE.PointLight(0xff7a28, 2.2, 12);
+      L2.position.set(2.2, 0.2, 2.5);
+      scene.add(L2);
+      const L3 = new THREE.PointLight(0x5b4dff, 1.6, 12);
+      L3.position.set(-2.4, -1.2, 1.8);
+      scene.add(L3);
+
+      /* —— Bright silk aurora core (opaque, high contrast) —— */
+      const coreMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uEnergy: { value: 1 },
+          uLook: { value: new THREE.Vector2() },
+        },
+        vertexShader: /* glsl */`
+          varying vec3 vN; varying vec3 vP;
+          void main() {
+            vN = normalize(normalMatrix * normal);
+            vP = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: /* glsl */`
+          precision highp float;
+          varying vec3 vN; varying vec3 vP;
+          uniform float uTime; uniform float uEnergy; uniform vec2 uLook;
+
+          float hash(vec3 p){ p=fract(p*0.3183099+0.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+          float noise(vec3 x){
+            vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
+            return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),
+                           mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+                       mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),
+                           mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+          }
+          float fbm(vec3 p){ float v=0.,a=.5; for(int i=0;i<6;i++){ v+=a*noise(p); p=p*2.08+vec3(1.7,1.3,1.1); a*=.5;} return v; }
+
+          void main(){
+            vec3 p = normalize(vP);
+            p.xy += uLook * 0.12;
+            float t = uTime * (0.35 + uEnergy * 0.2);
+
+            // Domain-warped flowing silk
+            vec3 q = p * 2.15;
+            q += 0.55 * vec3(
+              fbm(p*1.8 + vec3(t*0.4, 0., -t*0.2)),
+              fbm(p*1.8 + vec3(0., t*0.35, 2.)),
+              fbm(p*1.8 + vec3(-t*0.25, 3., t*0.3))
+            );
+            float n = fbm(q + t * 0.15);
+            float n2 = fbm(q * 1.4 - t * 0.2);
+
+            // Diagonal ribbon mask (orange crest like reference)
+            float diag = p.x * 0.85 + p.y * 0.55;
+            float ribbon = smoothstep(0.05, 0.55, n + diag * 0.35);
+            float ribbonEdge = smoothstep(0.35, 0.75, n2 + p.x * 0.4);
+            float fold = pow(ribbon * ribbonEdge, 0.85);
+
+            vec3 deep   = vec3(0.015, 0.02, 0.07);
+            vec3 indigo = vec3(0.08, 0.18, 0.95);
+            vec3 violet = vec3(0.45, 0.08, 0.95);
+            vec3 magenta= vec3(0.95, 0.15, 0.75);
+            vec3 orange = vec3(1.0, 0.38, 0.05);
+            vec3 gold   = vec3(1.0, 0.78, 0.32);
+            vec3 hot    = vec3(1.0, 0.92, 0.7);
+
+            vec3 col = deep;
+            // left / bottom cool wrap
+            col = mix(col, indigo, smoothstep(-0.9, 0.15, -p.x + n * 0.3) * 0.9);
+            col = mix(col, violet, (1.0 - fold) * smoothstep(-0.3, 0.8, -p.y) * 0.7);
+            // bright orange silk through center-right
+            col = mix(col, orange, fold);
+            col = mix(col, gold, fold * ribbonEdge * 0.75);
+            col = mix(col, hot, pow(fold, 2.2) * 0.55);
+            col = mix(col, magenta, (1.0 - fold) * ribbonEdge * 0.28);
+
+            // soft volume falloff toward rim of core
+            float facing = abs(dot(normalize(vN), vec3(0.,0.,1.)));
+            col *= 0.75 + 0.45 * facing;
+            col *= 0.9 + 0.25 * uEnergy;
+
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `,
+      });
+      const core = new THREE.Mesh(new THREE.SphereGeometry(0.88, 96, 96), coreMat);
+      root.add(core);
+
+      /* inner soft bloom shell */
+      const bloom = new THREE.Mesh(
+        new THREE.SphereGeometry(0.94, 48, 48),
+        new THREE.MeshBasicMaterial({
+          color: 0xff6a20, transparent: true, opacity: 0.12,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        })
+      );
+      root.add(bloom);
+
+      /* —— Fresnel glass shell (no broken transmission) —— */
+      const glassMat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: {},
+        vertexShader: /* glsl */`
+          varying vec3 vN; varying vec3 vV;
+          void main(){
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            vN = normalize(normalMatrix * normal);
+            vV = normalize(-mv.xyz);
+            gl_Position = projectionMatrix * mv;
+          }
+        `,
+        fragmentShader: /* glsl */`
+          varying vec3 vN; varying vec3 vV;
+          void main(){
+            float ndv = abs(dot(normalize(vN), normalize(vV)));
+            float fres = pow(1.0 - ndv, 2.4);
+            float edge = pow(1.0 - ndv, 4.5);
+            vec3 tint = vec3(0.75, 0.85, 1.0);
+            vec3 hi = vec3(1.0);
+            vec3 col = tint * fres * 0.55 + hi * edge * 0.85;
+            float a = clamp(fres * 0.55 + edge * 0.35, 0.0, 0.85);
+            gl_FragColor = vec4(col, a);
+          }
+        `,
+      });
+      root.add(new THREE.Mesh(new THREE.SphereGeometry(1.02, 96, 96), glassMat));
+
+      /* Specular highlight blob (key light catch) */
+      const shineGeo = new THREE.SphereGeometry(1.025, 64, 64);
+      const shineMat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */`
+          varying vec3 vN; varying vec3 vV;
+          void main(){
+            vec4 mv = modelViewMatrix * vec4(position,1.0);
+            vN = normalize(normalMatrix * normal);
+            vV = normalize(-mv.xyz);
+            gl_Position = projectionMatrix * mv;
+          }
+        `,
+        fragmentShader: /* glsl */`
+          varying vec3 vN; varying vec3 vV;
+          void main(){
+            vec3 n = normalize(vN);
+            // fixed key highlight upper-left like reference
+            vec3 L = normalize(vec3(-0.55, 0.75, 0.55));
+            float spec = pow(max(dot(reflect(-L, n), normalize(vV)), 0.0), 48.0);
+            float soft = pow(max(dot(n, L), 0.0), 6.0) * 0.25;
+            float a = spec * 0.95 + soft;
+            gl_FragColor = vec4(vec3(1.0), a);
+          }
+        `,
+      });
+      root.add(new THREE.Mesh(shineGeo, shineMat));
+
+      /* —— Vertical capsule eyes (pause-bar style) —— */
+      const face = new THREE.Group();
+      face.position.z = 0.62;
+      root.add(face);
+
+      function makeEye() {
+        const g = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          emissive: 0xffffff,
+          emissiveIntensity: 1.25,
+          roughness: 0.25,
+          metalness: 0,
+        });
+        // tall vertical pill: cylinder + caps along Y
+        const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.22, 24), mat);
+        const top = new THREE.Mesh(new THREE.SphereGeometry(0.048, 16, 12), mat);
+        const bot = new THREE.Mesh(new THREE.SphereGeometry(0.048, 16, 12), mat);
+        top.position.y = 0.11;
+        bot.position.y = -0.11;
+        g.add(cyl, top, bot);
+        return g;
+      }
+      const eyeL = makeEye();
+      const eyeR = makeEye();
+      eyeL.position.set(-0.125, 0.01, 0);
+      eyeR.position.set(0.125, 0.01, 0);
+      face.add(eyeL, eyeR);
+
+      // soft glow planes behind eyes
+      const eyeGlowMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0.22,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const egL = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), eyeGlowMat);
+      const egR = egL.clone();
+      egL.position.copy(eyeL.position); egL.position.z -= 0.02;
+      egR.position.copy(eyeR.position); egR.position.z -= 0.02;
+      egL.scale.set(0.7, 1.4, 0.5);
+      egR.scale.set(0.7, 1.4, 0.5);
+      face.add(egL, egR);
+
+      function resize() {
+        const w = stage.clientWidth, h = stage.clientHeight;
+        camera.aspect = w / Math.max(h, 1);
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
+      }
+      resize();
+      window.addEventListener('resize', resize);
+
+      function lookFromEvent(e) {
+        const r = stage.getBoundingClientRect();
+        targetLX = clamp(((e.clientX - r.left) / r.width - 0.5) * 2, -1, 1);
+        targetLY = clamp(((e.clientY - r.top) / r.height - 0.5) * 2, -1, 1);
+      }
+      stage.addEventListener('pointerenter', () => { tracking = true; });
+      stage.addEventListener('pointerleave', () => { tracking = false; });
+      stage.addEventListener('pointermove', (e) => { tracking = true; lookFromEvent(e); });
+      stage.addEventListener('pointerdown', (e) => {
+        stage.setPointerCapture(e.pointerId);
+        tracking = true; lookFromEvent(e);
+      });
+      stage.addEventListener('pointerup', () => { tracking = false; });
+
+      document.querySelectorAll('[data-look]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          tracking = true;
+          const [x, y] = btn.dataset.look.split(',').map(Number);
+          targetLX = x; targetLY = y;
+          setTimeout(() => { tracking = false; }, 1600);
+        });
+      });
+      document.querySelectorAll('[data-m]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('[data-m]').forEach((b) => b.classList.remove('on'));
+          btn.classList.add('on');
+          mode = btn.dataset.m;
+        });
+      });
+
+      const clock = new THREE.Clock();
+      function frame() {
+        const t = clock.getElapsedTime();
+        if (!tracking) {
+          targetLX = Math.sin(t * 0.48) * 0.5;
+          targetLY = Math.sin(t * 0.3) * 0.15;
+        }
+        curLX += (targetLX - curLX) * 0.14;
+        curLY += (targetLY - curLY) * 0.14;
+
+        const want = mode === 'speaking' ? 1.55 : mode === 'thinking' ? 1.28 : 1;
+        energy += (want - energy) * 0.07;
+
+        root.rotation.y = curLX * 0.58;
+        root.rotation.x = -curLY * 0.3;
+        face.position.set(curLX * 0.2, -curLY * 0.14, 0.62);
+        face.rotation.y = curLX * 0.4;
+        face.rotation.x = -curLY * 0.22;
+
+        let sy = 1;
+        if (mode === 'speaking') sy = 0.78 + Math.sin(t * 11) * 0.22;
+        else {
+          const b = Math.sin(t * 1.05) * 0.5 + 0.5;
+          sy = b > 0.97 ? 0.12 : 1;
+        }
+        eyeL.scale.set(1, sy, 1);
+        eyeR.scale.set(1, sy, 1);
+
+        coreMat.uniforms.uTime.value = t;
+        coreMat.uniforms.uEnergy.value = energy;
+        coreMat.uniforms.uLook.value.set(curLX, curLY);
+        bloom.material.opacity = 0.08 + energy * 0.08;
+        core.rotation.y = t * 0.06 * energy;
+
+        root.position.y = Math.sin(t * 0.85) * 0.035;
+        renderer.render(scene, camera);
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    } catch (e) {
+      errEl.style.display = 'block';
+      errEl.textContent = '加载失败：' + (e.message || e);
+      console.error(e);
+    }
+  </script>
+</body>
+</html>

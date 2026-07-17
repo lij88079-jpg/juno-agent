@@ -5,9 +5,25 @@ config/agent-profile.local.json
 *.local.json
 .env.*
 
+# Account pools / skill catalogs / local overrides (do not publish)
+config/cursor-accounts.json
+config/cc-skills.json
+config/cursor-account-profiles/
+
+# Vendored upstream skill mirrors (local only; use .cursor/skills)
+vendor/
+
+# Local-only engine bridges / account tooling (not for public tree)
+scripts/juno_cursor_agent.py
+scripts/cursor-account.ps1
+scripts/cursor-account.py
+scripts/cursor_account_pool.py
+config/cursor-accounts.local.json.example
+
 # Private runtime data (do not publish)
 memory/chat-sessions/
 memory/daily/
+memory/private-notes.md
 knowledge/conversations/auto/
 config/index/
 config/sync-state.json

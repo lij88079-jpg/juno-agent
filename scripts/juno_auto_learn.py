@@ -22,6 +22,15 @@ CASUAL_RE = re.compile(
     r"^(hi|hello|hey|你好|嗨|在吗|在不在|哈喽|yo|谢谢|好的|ok|嗯|哦)[\s!！。~～]*$",
     re.I,
 )
+META_Q_RE = re.compile(
+    r"什么模型|哪个模型|用的什么|啥模型|什么引擎|你是谁|你是什么|"
+    r"what model|who are you|which model",
+    re.I,
+)
+FAKE_MODEL_RE = re.compile(
+    r"deepseek-v\d|deepseek-v\d-pro|api\.deepseek\.com",
+    re.I,
+)
 
 
 def _today_file() -> Path:
@@ -67,6 +76,10 @@ def append_memory_auto(fact: str) -> None:
 
 def maybe_add_training_example(question: str, answer: str) -> bool:
     if len(question) < 12 or CASUAL_RE.match(question):
+        return False
+    if META_Q_RE.search(question):
+        return False
+    if FAKE_MODEL_RE.search(answer):
         return False
     if len(answer) < 20:
         return False

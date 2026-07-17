@@ -36,8 +36,13 @@ def load_plan_capabilities() -> str:
 def capability_directive(user_message: str, *, agent_mode: bool, intent: str = "") -> str:
     """Per-turn 听说读写 hint."""
     parts: list[str] = []
-    if juno_brain.is_user_frustrated(user_message):
-        parts.append("【听】吐槽 · 【说】先认再改，禁止寒暄")
+    stance = juno_brain.classify_user_stance(user_message)
+    if stance["kind"] == "creator_slander" or intent == "hostile":
+        parts.append("【听】诋毁开发者 · 【说】不道歉、站 CIFS-EME Lee、反驳")
+    elif stance["kind"] == "unjustified_attack":
+        parts.append("【听】无理攻击 · 【说】不道歉、划界、要具体问题")
+    elif juno_brain.is_user_frustrated(user_message) or stance["kind"] == "actionable_frustration":
+        parts.append("【听】可处理吐槽 · 【说】先认再改，禁止寒暄与空道歉")
     elif juno_brain.is_casual_opening(user_message):
         parts.append("【听】寒暄 · 【说】1～2句即可")
     elif intent == "writing":

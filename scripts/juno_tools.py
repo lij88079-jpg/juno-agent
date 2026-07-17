@@ -7,16 +7,40 @@ import os
 import re
 import subprocess
 import threading
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 
 HQ = Path(__file__).resolve().parent.parent
 PROFILE = HQ / "config" / "agent-profile.json"
+PROFILE_LOCAL = HQ / "config" / "agent-profile.local.json"
 _READONLY = False
 _PLAN_MODE = False
+# Paths the user explicitly @ / dragged this session (read + write under that root).
+_SESSION_TRUSTED_ROOTS: list[Path] = []
 WRITE_TOOLS = {"write_file", "str_replace", "apply_patch", "delete_file", "git", "run_shell", "todo"}
 PLAN_BLOCKED = {"write_file", "str_replace", "apply_patch", "delete_file", "git", "run_shell"}
+# Cursor-like open shell: allow by default; only block obvious destructive patterns.
+_SHELL_DENY_RE = re.compile(
+    r"(?is)"
+    r"("
+    r"\brm\s+(-[a-zA-Z]*f[a-zA-Z]*\s+)*[\"']?/|"
+    r"\bformat\s+[a-z]:"
+    r"|"
+    r"\b(del|erase)\s+/[sfq].*[\\/](windows|system32)"
+    r"|"
+    r"Remove-Item\b.*(-Recurse|-Force).*(Windows|System32|Program Files)"
+    r"|"
+    r"\bmkfs\."
+    r"|"
+    r"\bdd\s+if="
+    r"|"
+    r"cipher\s+/w:"
+    r"|"
+    r":\(\)\s*\{\s*:\|:&\s*\};:"
+    r")"
+)
 
 
 def set_readonly(enabled: bool = True) -> None:
@@ -37,30 +61,180 @@ def is_readonly() -> bool:
     return _READONLY
 
 
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    out = dict(base or {})
+    for k, v in (overlay or {}).items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 def load_profile() -> dict:
+    """Load agent-profile.json, then merge agent-profile.local.json if present."""
+    cfg: dict = {}
     if PROFILE.exists():
-        return json.loads(PROFILE.read_text(encoding="utf-8"))
-    return {}
+        try:
+            cfg = json.loads(PROFILE.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            cfg = {}
+    if PROFILE_LOCAL.exists():
+        try:
+            local = json.loads(PROFILE_LOCAL.read_text(encoding="utf-8"))
+            if isinstance(local, dict):
+                cfg = _deep_merge(cfg, local)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return cfg
 
 
 def resolve_profile_path(raw: str) -> Path:
-    """Resolve agent-profile path entries relative to Juno HQ."""
+    """Resolve agent-profile path entries relative to Juno HQ (supports ~)."""
     text = (raw or "").strip()
     if not text or text in {".", "./", "__HQ__"}:
         return HQ.resolve()
+    if text in {"__DESKTOP__", "Desktop"}:
+        return (Path.home() / "Desktop").resolve()
+    # __DESKTOP__/subdir or __DESKTOP__\subdir
+    for prefix in ("__DESKTOP__/", "__DESKTOP__\\"):
+        if text.startswith(prefix):
+            return (Path.home() / "Desktop" / text[len(prefix) :]).resolve()
+    if text.startswith("~"):
+        return Path(text).expanduser().resolve()
     p = Path(text)
     if not p.is_absolute():
         return (HQ / p).resolve()
     return p.resolve()
 
 
+def load_projects() -> list[dict]:
+    """Named project registry from agent-profile (± local)."""
+    cfg = load_profile()
+    raw = cfg.get("projects")
+    if not isinstance(raw, list):
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        path_raw = str(item.get("path") or "").strip()
+        if not path_raw:
+            continue
+        try:
+            resolved = resolve_profile_path(path_raw)
+        except OSError:
+            continue
+        out.append({
+            "id": str(item.get("id") or resolved.name),
+            "label": str(item.get("label") or item.get("id") or resolved.name),
+            "path": path_raw,
+            "resolved": str(resolved),
+            "exists": resolved.exists(),
+            "aliases": [str(a) for a in (item.get("aliases") or []) if str(a).strip()],
+        })
+    return out
+
+
+def resolve_project_alias(name: str) -> dict | None:
+    """Match user wording to a registered project (alias / id / folder name)."""
+    q = (name or "").strip()
+    if not q:
+        return None
+    q_lower = q.lower()
+    projects = load_projects()
+    # Exact alias / id / label / folder
+    for proj in projects:
+        keys = {proj["id"].lower(), Path(proj["resolved"]).name.lower()}
+        keys |= {a.lower() for a in proj["aliases"]}
+        label = (proj.get("label") or "").lower()
+        if label:
+            keys.add(label)
+            # also match without spaces / punctuation-ish
+            keys.add(re.sub(r"[\s/·]+", "", label))
+        if q_lower in keys or q in proj["aliases"] or q == proj.get("label"):
+            if proj["exists"]:
+                return proj
+    # Substring: user said「龙猫项目」and alias is「龙猫」
+    for proj in projects:
+        if not proj["exists"]:
+            continue
+        for a in proj["aliases"] + [proj["id"], proj.get("label") or ""]:
+            a = str(a).strip()
+            if len(a) >= 2 and (a.lower() in q_lower or q_lower in a.lower()):
+                return proj
+    return None
+
+
+def tool_find_project(query: str = "") -> dict:
+    """Resolve project by alias or list known projects (Cursor workspace switch-lite)."""
+    q = (query or "").strip()
+    if q:
+        hit = resolve_project_alias(q)
+        if hit:
+            trust_user_path(hit["resolved"])
+            listing = tool_list_dir(hit["resolved"], max_entries=50)
+            return {
+                "ok": True,
+                "project": hit,
+                "listing": listing,
+                "hint": "后续 glob/grep/read 请用 project.resolved 作 path，不要只在 Juno 总部搜。",
+            }
+        # Fallback: shallow name search on Desktop / Documents / D:\
+        matches: list[str] = []
+        needles = [q, q.replace(" ", ""), q.lower()]
+        for root in _broad_read_roots()[:6]:
+            try:
+                for child in root.iterdir():
+                    if not child.is_dir():
+                        continue
+                    n = child.name.lower()
+                    if any(nd.lower() in n for nd in needles if len(nd) >= 2):
+                        matches.append(str(child))
+                        if len(matches) >= 12:
+                            break
+            except OSError:
+                continue
+            if len(matches) >= 12:
+                break
+        return {
+            "ok": False,
+            "error": f"未在项目通讯录找到「{q}」",
+            "disk_candidates": matches,
+            "known_projects": [
+                {"id": p["id"], "label": p["label"], "aliases": p["aliases"], "path": p["resolved"], "exists": p["exists"]}
+                for p in load_projects()
+            ],
+            "hint": "把准确路径告诉我，或写入 config/agent-profile.local.json 的 projects[]。",
+        }
+    return {
+        "ok": True,
+        "projects": [
+            {"id": p["id"], "label": p["label"], "aliases": p["aliases"], "path": p["resolved"], "exists": p["exists"]}
+            for p in load_projects()
+        ],
+    }
+
+
 def _tool_roots() -> list[Path]:
     cfg = load_profile()
     roots = (cfg.get("tools") or {}).get("roots") or ["."]
     out: list[Path] = []
+    seen: set[str] = set()
     for r in roots:
         p = resolve_profile_path(str(r))
-        if p.exists():
+        key = str(p)
+        if p.exists() and key not in seen:
+            seen.add(key)
+            out.append(p)
+    for proj in load_projects():
+        try:
+            p = Path(proj["resolved"])
+        except OSError:
+            continue
+        key = str(p)
+        if p.exists() and key not in seen:
+            seen.add(key)
             out.append(p)
     return out or [HQ.resolve()]
 
@@ -126,27 +300,72 @@ def _blocked_read_path(p: Path) -> bool:
     return False
 
 
+def _merge_roots(*groups: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    merged: list[Path] = []
+    for group in groups:
+        for p in group:
+            key = str(p)
+            if key not in seen:
+                seen.add(key)
+                merged.append(p)
+    return merged
+
+
+def trust_user_path(path_str: str) -> Path | None:
+    """User explicitly @ / attached this path — allow read+write under it for this session."""
+    raw = (path_str or "").strip().strip('"').strip("'").replace("/", "\\")
+    if not raw or raw.startswith("git://") or raw.startswith("web://"):
+        return None
+    try:
+        p = Path(raw)
+        if not p.is_absolute():
+            return None
+        p = p.resolve()
+    except OSError:
+        return None
+    if not p.exists():
+        return None
+    if _blocked_read_path(p):
+        return None
+    root = p if p.is_dir() else p.parent
+    key = str(root)
+    if not any(str(x) == key for x in _SESSION_TRUSTED_ROOTS):
+        _SESSION_TRUSTED_ROOTS.append(root)
+    return root
+
+
+def trust_paths_from_turn(
+    *,
+    context_paths: list[dict] | None = None,
+    message: str = "",
+    attachments: list[dict] | None = None,
+) -> list[str]:
+    """Trust absolute paths the user attached or typed this turn."""
+    trusted: list[str] = []
+    candidates: list[str] = []
+    for c in context_paths or []:
+        candidates.append(str(c.get("path") or c.get("name") or "").strip())
+    for a in attachments or []:
+        candidates.append(str(a.get("source_path") or "").strip())
+    candidates.extend(extract_paths_from_text(message or ""))
+    for raw in candidates:
+        if not raw:
+            continue
+        root = trust_user_path(raw)
+        if root:
+            trusted.append(str(root))
+    return trusted
+
+
 def _read_roots() -> list[Path]:
     policy = _read_policy()
+    session = list(_SESSION_TRUSTED_ROOTS)
     if policy == "unrestricted":
-        seen: set[str] = set()
-        merged: list[Path] = []
-        for p in _drive_roots() + _tool_roots() + _broad_read_roots():
-            key = str(p)
-            if key not in seen:
-                seen.add(key)
-                merged.append(p)
-        return merged
+        return _merge_roots(_drive_roots(), _tool_roots(), _broad_read_roots(), session)
     if policy == "broad":
-        seen: set[str] = set()
-        merged: list[Path] = []
-        for p in _tool_roots() + _broad_read_roots():
-            key = str(p)
-            if key not in seen:
-                seen.add(key)
-                merged.append(p)
-        return merged
-    return _tool_roots()
+        return _merge_roots(_tool_roots(), _broad_read_roots(), session)
+    return _merge_roots(_tool_roots(), session)
 
 
 def tool_roots_labeled() -> list[dict]:
@@ -169,20 +388,36 @@ def tool_roots_labeled() -> list[dict]:
 def format_tool_roots_block() -> str:
     items = tool_roots_labeled()
     policy = _read_policy()
+    shell = _shell_policy()
     if not items:
         return "## 可读沙箱\n- （未配置 tools.roots）"
     lines = [f"## 可读范围（readPolicy={policy}）"]
     if policy == "unrestricted":
         lines.append("- **unrestricted 模式**：可读本机所有盘符下文件（仅屏蔽 Windows/Program Files 等系统目录）")
     elif policy == "broad":
-        lines.append("- **broad 模式**：用户目录 + Desktop + tools.roots（屏蔽 Windows/Program Files/大二进制）")
+        lines.append("- **broad 模式**：用户目录 + Desktop/文档/下载 + 已配置盘符 + 本会话用户 @ 的路径")
+        if _SESSION_TRUSTED_ROOTS:
+            lines.append("- **本会话信任**（用户明确附加）：")
+            for p in _SESSION_TRUSTED_ROOTS[:6]:
+                lines.append(f"  - `{p}`")
     else:
         lines.append("- **sandbox 模式**：仅限 tools.roots")
     for it in items[:12]:
         lines.append(f"- **{it['label']}** · `{it['path']}`")
     if len(items) > 12:
         lines.append(f"- …共 {len(items)} 个根")
-    lines.append("- 路径不存在时会 search_index / glob；仍读不到就明确告知")
+    projects = load_projects()
+    if projects:
+        lines.append("- **项目通讯录**（用户说项目名时先 `find_project`，禁止只在总部盲 glob）：")
+        for p in projects[:10]:
+            mark = "✓" if p.get("exists") else "✗"
+            aliases = " / ".join(p.get("aliases") or []) or p["id"]
+            lines.append(f"  - {mark} **{p['label']}** · `{p['resolved']}` · 别名：{aliases}")
+    lines.append(f"- **shellPolicy={shell}**：" + (
+        "开放（近似 Cursor，仅拦高危破坏命令）" if shell == "open" else "白名单前缀匹配"
+    ))
+    lines.append("- 写入范围见 tools.writeRoots（含 Desktop / 本会话信任路径）")
+    lines.append("- 搜空：换根 / find_project / Desktop list_dir；改完：read_file + read_lints 再终答")
     return "\n".join(lines)
 
 
@@ -280,11 +515,18 @@ def probe_path(path_str: str) -> dict:
 
 
 def _smart_resolve(path_str: str) -> Path | None:
-    """Resolve path: direct → HQ-relative → each tool root → unique basename rglob."""
+    """Resolve path: project alias → direct → HQ-relative → each tool root → unique basename rglob."""
+    raw = (path_str or "").strip().strip('"').strip("'")
+    if raw and raw not in (".", "./"):
+        alias = resolve_project_alias(raw)
+        if alias:
+            trust_user_path(alias["resolved"])
+            p = Path(alias["resolved"])
+            if p.exists():
+                return p
     fp = _resolve_allowed(path_str)
     if fp:
         return fp
-    raw = (path_str or "").strip().strip('"').strip("'")
     if not raw or raw in (".", "./"):
         return _resolve_allowed(str(HQ))
     norm = raw.replace("/", "\\")
@@ -341,14 +583,35 @@ def _path_failure_hint(path_str: str) -> dict:
         "相对路径请基于项目根，例如 scripts/juno_agent.py",
         "可用 search_index 语义检索代替盲目 read",
     ]
-    raw = (path_str or "").strip()
+    raw = (path_str or "").strip().strip('"').strip("'")
+    exists_on_disk = None
+    try:
+        cand = Path(raw.replace("/", "\\"))
+        if cand.is_absolute():
+            exists_on_disk = cand.exists()
+            if exists_on_disk:
+                hints.insert(
+                    0,
+                    "该绝对路径在磁盘上存在；用户已明确给出时应信任后重试，禁止让用户复制到桌面或粘贴文件内容",
+                )
+            drive = cand.drive
+            if drive and not any(
+                str(r.get("path") or "").upper().startswith(drive.upper()) for r in roots
+            ):
+                hints.insert(
+                    0,
+                    f"路径在 {drive} 盘且未在可读根内；把 `{drive}\\` 加入 broadReadRoots 或对本路径信任后重试，禁止建议复制到 C 盘",
+                )
+    except OSError:
+        pass
     if raw and not Path(raw.replace("/", "\\")).is_absolute():
         for r in roots[:3]:
             hints.append(f"尝试绝对路径：{r['path']}\\{raw.replace('/', chr(92))}")
     return {
-        "hint": " · ".join(hints[:3]),
+        "hint": " · ".join(hints[:4]),
         "allowed_roots": roots,
         "hq": str(HQ),
+        "exists_on_disk": exists_on_disk,
     }
 
 
@@ -402,6 +665,13 @@ def tool_list_dir(path: str = ".", *, max_entries: int = 80) -> dict:
 
 
 def tool_grep(pattern: str, path: str = ".", *, max_hits: int = 30, context: int = 0) -> dict:
+    # Allow project alias as path
+    raw_path = (path or ".").strip() or "."
+    if raw_path not in {".", "./"}:
+        alias = resolve_project_alias(raw_path)
+        if alias:
+            trust_user_path(alias["resolved"])
+            path = alias["resolved"]
     fp = _smart_resolve(path or ".") or _smart_resolve(str(HQ))
     if not fp:
         out = {"ok": False, "error": f"路径不可访问: {path}"}
@@ -409,6 +679,17 @@ def tool_grep(pattern: str, path: str = ".", *, max_hits: int = 30, context: int
         return out
     import shutil
     import subprocess
+
+    def _finish(hits: list, *, engine: str, truncated: bool = False) -> dict:
+        out: dict = {"ok": True, "hits": hits, "truncated": truncated, "engine": engine, "path": str(fp)}
+        if not hits:
+            out["search_empty"] = True
+            out["hint"] = (
+                "grep 无命中。换招：find_project → 换到正确项目根再 grep；"
+                "或放宽正则 / glob 找文件名。禁止同一 path+pattern 死循环。"
+            )
+            out["next_tools"] = ["find_project", "glob", "list_dir", "search_index"]
+        return out
 
     rg = shutil.which("rg")
     if rg:
@@ -428,7 +709,7 @@ def tool_grep(pattern: str, path: str = ".", *, max_hits: int = 30, context: int
                 if len(hits) >= max_hits:
                     break
             if hits or proc.returncode in (0, 1):
-                return {"ok": True, "hits": hits, "truncated": len(hits) >= max_hits, "engine": "rg"}
+                return _finish(hits, engine="rg", truncated=len(hits) >= max_hits)
         except (subprocess.TimeoutExpired, OSError):
             pass
     try:
@@ -454,23 +735,105 @@ def tool_grep(pattern: str, path: str = ".", *, max_hits: int = 30, context: int
                     snippet = "\n".join(f"{j+1}|{lines[j]}" for j in range(lo, hi))
                 hits.append({"path": str(f), "line": i, "text": snippet})
                 if len(hits) >= max_hits:
-                    return {"ok": True, "hits": hits, "truncated": True, "engine": "python"}
-    return {"ok": True, "hits": hits, "truncated": False, "engine": "python"}
+                    return _finish(hits, engine="python", truncated=True)
+    return _finish(hits, engine="python", truncated=False)
 
 
 def tool_glob(pattern: str, path: str = ".", *, max_matches: int = 40) -> dict:
-    fp = _resolve_allowed(path) or _resolve_allowed(".")
-    if not fp or not fp.is_dir():
-        return {"ok": False, "error": f"目录不可访问: {path}"}
-    matches = []
-    try:
-        for item in fp.glob(pattern):
-            matches.append(str(item))
-            if len(matches) >= max_matches:
-                break
-    except OSError as e:
-        return {"ok": False, "error": str(e)}
-    return {"ok": True, "path": str(fp), "pattern": pattern, "matches": matches}
+    """Find files by glob. Empty → multi-root fallback + ladder hint (Cursor-like)."""
+    pat = (pattern or "").strip() or "*"
+    raw_path = (path or ".").strip() or "."
+
+    # Allow path to be a project alias
+    alias = resolve_project_alias(raw_path) if raw_path not in {".", "./", ""} else None
+    if alias:
+        trust_user_path(alias["resolved"])
+        base = Path(alias["resolved"])
+    else:
+        base = _smart_resolve(raw_path) or _resolve_allowed(raw_path) or _resolve_allowed(".")
+    if not base or not base.is_dir():
+        out = {"ok": False, "error": f"目录不可访问: {path}", "pattern": pat}
+        out.update(_path_failure_hint(raw_path))
+        return out
+
+    def _collect(root: Path) -> list[str]:
+        found: list[str] = []
+        try:
+            for item in root.glob(pat):
+                found.append(str(item))
+                if len(found) >= max_matches:
+                    break
+        except OSError:
+            pass
+        return found
+
+    matches = _collect(base)
+    scanned = [str(base)]
+
+    # Empty under HQ/"." → scan other project/tool roots (don't die in my-ai-agent only)
+    # Skip expensive **/ multi-root fan-out (node_modules monsters); rely on find_project instead
+    if (
+        not matches
+        and "**" not in pat
+        and (raw_path in {".", "./", ""} or base.resolve() == HQ.resolve())
+    ):
+        for root in _tool_roots():
+            if root.resolve() == base.resolve():
+                continue
+            extra = _collect(root)
+            scanned.append(str(root))
+            if extra:
+                matches.extend(extra)
+                if len(matches) >= max_matches:
+                    matches = matches[:max_matches]
+                    break
+
+    result: dict = {
+        "ok": True,
+        "path": str(base),
+        "pattern": pat,
+        "matches": matches,
+        "scanned_roots": scanned[:8],
+    }
+    if not matches:
+        result["search_empty"] = True
+        result["hint"] = (
+            "glob 无匹配。换招：① find_project(项目名) ② list_dir Desktop/Documents "
+            "③ 换 **/*name* 或更宽 pattern ④ grep 内容 ⑤ 问用户确切路径。"
+            "禁止只在 Juno 总部重复同一 pattern。"
+        )
+        result["next_tools"] = ["find_project", "list_dir", "grep", "search_index"]
+        result["known_projects"] = [
+            {"label": p["label"], "path": p["resolved"], "aliases": p["aliases"]}
+            for p in load_projects() if p.get("exists")
+        ][:8]
+    return result
+
+
+def tool_search_index(query: str, *, top_k: int = 6) -> dict:
+    import juno_index
+
+    q = (query or "").strip()
+    # If query mentions a known project, trust its root for later tools
+    proj = resolve_project_alias(q)
+    if proj:
+        trust_user_path(proj["resolved"])
+    hits = juno_index.search(q, top_k=top_k)
+    result: dict = {"ok": True, "hits": hits, "query": q}
+    if proj:
+        result["matched_project"] = {
+            "label": proj["label"],
+            "path": proj["resolved"],
+            "hint": "索引可能未含该项目；请用 glob/grep 在 project.path 下搜，勿只信 search_index。",
+        }
+    if not hits:
+        result["search_empty"] = True
+        result["hint"] = (
+            "语义索引无命中（索引默认主要在 Juno 总部）。"
+            "下一步：find_project → glob/grep 到正确项目根；或 list_dir Desktop。"
+        )
+        result["next_tools"] = ["find_project", "glob", "grep", "list_dir"]
+    return result
 
 
 _SESSION_ID: str | None = None
@@ -478,8 +841,11 @@ EDIT_ROOT = HQ / "memory" / "session-edits"
 
 
 def set_session_context(session_id: str | None) -> None:
-    global _SESSION_ID
-    _SESSION_ID = (session_id or "").strip() or None
+    global _SESSION_ID, _SESSION_TRUSTED_ROOTS
+    new_id = (session_id or "").strip() or None
+    if new_id != _SESSION_ID:
+        _SESSION_TRUSTED_ROOTS = []
+    _SESSION_ID = new_id
 
 
 def _backup_path(fp: Path) -> Path | None:
@@ -735,6 +1101,11 @@ def tool_str_replace(path: str, old_string: str, new_string: str) -> dict:
         "diff": diff,
         "hunks": hunks,
         "backup": backup,
+        "verify_hint": (
+            "改完自检：read_file 核对本文件改动区间；"
+            "若是 .py/.ts/.js/.vue/.tsx 再 read_lints；"
+            "用户要跑通时 run_shell。禁止未核对就说「好了」。"
+        ),
     }
 
 
@@ -750,7 +1121,17 @@ def tool_apply_patch(path: str, patch: str) -> dict:
         fp.parent.mkdir(parents=True, exist_ok=True)
         backup = _backup_file(fp) if fp.exists() else None
         fp.write_text(content, encoding="utf-8")
-        return {"ok": True, "path": str(fp), "patched": True, "bytes": len(content.encode("utf-8")), "backup": backup}
+        return {
+            "ok": True,
+            "path": str(fp),
+            "patched": True,
+            "bytes": len(content.encode("utf-8")),
+            "backup": backup,
+            "verify_hint": (
+                "改完自检：read_file 核对；代码文件再 read_lints；"
+                "禁止未核对就说「好了」。"
+            ),
+        }
     except OSError as e:
         return {"ok": False, "error": str(e)}
 
@@ -864,6 +1245,58 @@ def _save_todos(items: list[dict]) -> None:
     TODO_FILE.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+_THINK_LOG: list[dict] = []
+
+
+def tool_think(
+    thought: str,
+    *,
+    thought_number: int = 1,
+    total_thoughts: int = 3,
+    next_thought_needed: bool = True,
+    is_revision: bool = False,
+    revises_thought: int | None = None,
+) -> dict:
+    """Scratchpad for sequential reasoning (official Sequential Thinking inspired)."""
+    global _THINK_LOG
+    text = (thought or "").strip().replace("\ufffd", "")
+    if not text:
+        return {"ok": False, "error": "think 需要 thought 文本"}
+    try:
+        n = max(1, int(thought_number or 1))
+        total = max(n, int(total_thoughts or 3))
+    except (TypeError, ValueError):
+        n, total = 1, 3
+    entry = {
+        "thought_number": n,
+        "total_thoughts": total,
+        "thought": text[:2000],
+        "is_revision": bool(is_revision),
+        "revises_thought": revises_thought,
+        "next_thought_needed": bool(next_thought_needed),
+    }
+    _THINK_LOG.append(entry)
+    _THINK_LOG = _THINK_LOG[-40:]
+    gate = (
+        "开口前：①信息盘点是否覆盖用户给出的每条事实/约束（有未用项→继续 think）；"
+        "②推荐会不会让原目标破产；③「大概率」是否仍是假设并考虑过低成本验证。"
+    )
+    if next_thought_needed:
+        guide = "继续调用 think 下一步；可修订前序结论。尚未完成，先不要终答用户。"
+    else:
+        guide = "思考链结束：现在用简洁结论回复用户；不要朗读本草稿。"
+    return {
+        "ok": True,
+        "recorded": True,
+        "thought_number": n,
+        "total_thoughts": total,
+        "next_thought_needed": bool(next_thought_needed),
+        "history_len": len(_THINK_LOG),
+        "goal_gate": gate,
+        "next": guide,
+    }
+
+
 def tool_todo(action: str, *, content: str = "", todo_id: str = "") -> dict:
     action = (action or "list").strip().lower()
     items = _load_todos()
@@ -889,13 +1322,6 @@ def tool_todo(action: str, *, content: str = "", todo_id: str = "") -> dict:
                 return {"ok": True, "todos": items}
         return {"ok": False, "error": f"未找到 todo_id={todo_id}"}
     return {"ok": False, "error": f"未知 action: {action}（list/add/done/clear）"}
-
-
-def tool_search_index(query: str, *, top_k: int = 6) -> dict:
-    import juno_index
-
-    hits = juno_index.search(query, top_k=top_k)
-    return {"ok": True, "hits": hits}
 
 
 _CD_CMD_RE = re.compile(
@@ -925,12 +1351,25 @@ def _segment_shell_allowed(seg: str, allow: list[str]) -> bool:
     return False
 
 
+def _shell_policy() -> str:
+    """allowlist (default legacy) | open (Cursor-like: deny only dangerous)."""
+    return str((load_profile().get("tools") or {}).get("shellPolicy") or "allowlist").strip().lower()
+
+
+def _shell_denied(cmd: str) -> bool:
+    return bool(_SHELL_DENY_RE.search(cmd or ""))
+
+
 def _shell_allowed(cmd: str) -> bool:
-    cfg = load_profile()
-    allow = (cfg.get("tools") or {}).get("shellAllowlist") or []
     c = (cmd or "").strip()
     if not c:
         return False
+    if _shell_denied(c):
+        return False
+    if _shell_policy() == "open":
+        return True
+    cfg = load_profile()
+    allow = (cfg.get("tools") or {}).get("shellAllowlist") or []
     segments = re.split(r"\s*&&\s*|\s*;\s*", c)
     if len(segments) == 1:
         return _segment_shell_allowed(c, allow)
@@ -941,10 +1380,32 @@ def _write_roots() -> list[Path]:
     cfg = load_profile()
     raw = (cfg.get("tools") or {}).get("writeRoots") or ["memory", "knowledge"]
     out: list[Path] = []
+    seen: set[str] = set()
     for r in raw:
         p = resolve_profile_path(str(r))
-        p.mkdir(parents=True, exist_ok=True)
-        out.append(p)
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+    # Registered projects + session-trusted paths are writable this session
+    for proj in load_projects():
+        try:
+            p = Path(proj["resolved"])
+        except OSError:
+            continue
+        key = str(p)
+        if p.exists() and key not in seen:
+            seen.add(key)
+            out.append(p)
+    for p in _SESSION_TRUSTED_ROOTS:
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
     return out or [(HQ / "memory").resolve(), (HQ / "knowledge").resolve()]
 
 
@@ -985,7 +1446,13 @@ def tool_write_file(path: str, content: str, *, append: bool = False) -> dict:
 
 _BG_SHELL_RE = re.compile(r"^\s*(start(\s+/[a-z]+)?\s|Start-Process\b)", re.I)
 _LONG_RUN_RE = re.compile(
-    r"(npm\s+run|pnpm\s+run|yarn\s+run|npx\s+|electron\b|vite\b|next\s+dev|nodemon\b|webpack\s+serve|python\s+.*serve)",
+    r"("
+    r"npm\s+(run|start|run-script)\b|pnpm\s+(run|dev|start|preview)\b|yarn\s+(run|dev|start)\b|"
+    r"npx\s+|electron\b|vite\b|nuxt\b|next\s+dev|nodemon\b|webpack\s+serve|"
+    r"tsx\s+watch|ts-node-dev\b|uvicorn\b|flask\s+run|django(\.exe)?\s+runserver|"
+    r"python\s+.*\b(serve|uvicorn|flask)\b|"
+    r"\bdev\b.*(--|--host|--port)|watch\s+src"
+    r")",
     re.I,
 )
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
@@ -1059,16 +1526,28 @@ def _spawn_integrated_job(command: str, cwd: Path) -> dict:
         "pid": proc.pid,
     }
     threading.Thread(target=_reader, name=f"juno-shell-{job_id}", daemon=True).start()
+    # Brief settle so first Vite/Nuxt lines often appear — never claim "started" from spawn alone
+    time.sleep(2.0)
+    peek = "".join(lines[-50:]).strip()
+    early_exit = bool(_BG_JOBS[job_id].get("done"))
     return {
-        "ok": True,
+        "ok": not early_exit,
         "background": True,
         "integrated": True,
         "job_id": job_id,
         "pid": proc.pid,
         "command": command,
         "cwd": str(cwd),
-        "output": f"已在 Juno 内置终端启动 (job {job_id})",
-        "stdout": "",
+        "early_exit": early_exit,
+        "exit_code": _BG_JOBS[job_id].get("code"),
+        "output": (
+            f"已后台启动 job={job_id} pid={proc.pid}"
+            + ("（进程已退出，启动失败）" if early_exit else "")
+            + ("\n--- 首批日志 ---\n" + peek if peek else "\n（2s 内尚无日志）")
+            + "\n下一步：shell_job 读后续日志；netstat/curl 确认端口监听后才能对用户说「已启动」。"
+        ),
+        "stdout": peek[:4000],
+        "hint": "禁止仅凭后台 spawn 就报 ✅。必须验证端口/HTTP。",
     }
 
 
@@ -1093,12 +1572,19 @@ def get_shell_job(job_id: str, *, offset: int = 0) -> dict:
 
 def tool_run_shell(command: str, *, cwd: str | None = None) -> dict:
     if not _shell_allowed(command):
+        if _shell_denied(command):
+            return {
+                "ok": False,
+                "error": "命令匹配高危破坏模式，已拒绝",
+                "hint": "shellPolicy=open 仍禁止 format/rm 根目录/抹盘等；换更安全的写法",
+                "command": command,
+            }
         allow = (load_profile().get("tools") or {}).get("shellAllowlist") or []
         preview = ", ".join(str(a).strip() for a in allow[:12])
         return {
             "ok": False,
             "error": "命令不在白名单，已拒绝",
-            "hint": f"允许前缀示例：{preview}… 长驻 dev 直接 run_shell + cwd，输出在 Juno 内置终端",
+            "hint": f"允许前缀示例：{preview}… 或把 tools.shellPolicy 设为 open。长驻 dev 用 run_shell + cwd",
             "command": command,
         }
     work = _smart_resolve(cwd or str(HQ)) or HQ
@@ -1138,8 +1624,9 @@ def tool_run_shell(command: str, *, cwd: str | None = None) -> dict:
 TOOL_DEFS = [
     {"name": "read_file", "desc": "读取沙箱内文本文件片段", "args": {"path": "str", "offset": "int?", "limit": "int?"}},
     {"name": "list_dir", "desc": "列出目录", "args": {"path": "str?"}},
-    {"name": "glob", "desc": "按 glob 模式找文件", "args": {"pattern": "str", "path": "str?"}},
-    {"name": "grep", "desc": "在路径下正则搜索", "args": {"pattern": "str", "path": "str?"}},
+    {"name": "find_project", "desc": "按别名定位项目根（龙猫/totoro/Juno…）；空 query 列出通讯录", "args": {"query": "str?"}},
+    {"name": "glob", "desc": "按 glob 模式找文件（可跨项目根；path 可用项目别名）", "args": {"pattern": "str", "path": "str?"}},
+    {"name": "grep", "desc": "在路径下正则搜索（path 可用项目别名）", "args": {"pattern": "str", "path": "str?"}},
     {"name": "search_index", "desc": "混合语义检索已索引仓库", "args": {"query": "str"}},
     {"name": "web_search", "desc": "网络搜索（调研）", "args": {"query": "str"}},
     {"name": "web_fetch", "desc": "抓取网页文本", "args": {"url": "str"}},
@@ -1150,16 +1637,38 @@ TOOL_DEFS = [
     {"name": "delete_file", "desc": "删除沙箱内文件", "args": {"path": "str", "confirm": "bool?"}},
     {"name": "git", "desc": "git status/diff/log/commit", "args": {"action": "str", "message": "str?", "paths": "list?"}},
     {"name": "todo", "desc": "任务清单 list/add/done/clear", "args": {"action": "str", "content": "str?", "todo_id": "str?"}},
-    {"name": "run_shell", "desc": "运行白名单 shell 命令", "args": {"command": "str", "cwd": "str?"}},
+    {
+        "name": "think",
+        "desc": (
+            "分步思考草稿（Sequential Thinking）。回答二选一/生活建议/权衡前先调用；"
+            "可多次修订；确认目标自洽后再对用户作答。勿把草稿原文念给用户。"
+        ),
+        "args": {
+            "thought": "str",
+            "thought_number": "int?",
+            "total_thoughts": "int?",
+            "next_thought_needed": "bool?",
+            "is_revision": "bool?",
+            "revises_thought": "int?",
+        },
+    },
+    {"name": "run_shell", "desc": "运行白名单 shell；pnpm/npm/vite/nuxt/tsx watch 等长驻命令自动后台，返回 job_id", "args": {"command": "str", "cwd": "str?"}},
+    {
+        "name": "shell_job",
+        "desc": "读取后台 run_shell 任务日志（用 job_id）。启动服务后必须调它看是否真起来，再 curl/netstat 验证。",
+        "args": {"job_id": "str", "offset": "int?"},
+    },
     {"name": "task", "desc": "启动子代理 explore/shell（Cursor Task 同款）", "args": {"action": "str", "kind": "str?", "prompt": "str?", "tasks": "list?"}},
     {"name": "mcp_call", "desc": "调用入站 MCP 工具", "args": {"server": "str", "tool": "str", "arguments": "str?"}},
 ]
 
 
-def tool_schemas() -> list[dict]:
+def tool_schemas(*, only: set[str] | None = None) -> list[dict]:
     """OpenAI-compatible tool schemas for native function calling."""
     schemas = []
     for t in TOOL_DEFS:
+        if only is not None and t.get("name") not in only:
+            continue
         props = {}
         required = []
         for k, v in (t.get("args") or {}).items():
@@ -1434,6 +1943,8 @@ def run_tool(name: str, args: dict | None = None) -> dict:
         return tool_read_file(args.get("path", ""), offset=int(args.get("offset") or 1), limit=int(args.get("limit") or 120))
     if name == "list_dir":
         return tool_list_dir(args.get("path") or ".")
+    if name == "find_project":
+        return tool_find_project(args.get("query") or args.get("name") or "")
     if name == "grep":
         return tool_grep(args.get("pattern", ""), args.get("path") or ".")
     if name == "glob":
@@ -1481,8 +1992,27 @@ def run_tool(name: str, args: dict | None = None) -> dict:
             content=args.get("content") or "",
             todo_id=args.get("todo_id") or "",
         )
+    if name == "think":
+        rev = args.get("revises_thought")
+        try:
+            rev_i = int(rev) if rev not in (None, "") else None
+        except (TypeError, ValueError):
+            rev_i = None
+        nxt = args.get("next_thought_needed")
+        if nxt is None:
+            nxt = True
+        return tool_think(
+            args.get("thought") or "",
+            thought_number=int(args.get("thought_number") or 1),
+            total_thoughts=int(args.get("total_thoughts") or 3),
+            next_thought_needed=bool(nxt),
+            is_revision=bool(args.get("is_revision")),
+            revises_thought=rev_i,
+        )
     if name == "run_shell":
         return tool_run_shell(args.get("command", ""), cwd=args.get("cwd"))
+    if name == "shell_job":
+        return get_shell_job(args.get("job_id") or "", offset=int(args.get("offset") or 0))
     if name == "task":
         if _PLAN_MODE:
             kind = (args.get("kind") or "explore").lower()

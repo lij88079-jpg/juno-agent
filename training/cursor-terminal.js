@@ -28,6 +28,11 @@
       document.getElementById('btn-rail-terminal')?.classList.add('active');
     }
 
+    close() {
+      this.panel?.classList.remove('open');
+      document.getElementById('btn-rail-terminal')?.classList.remove('active');
+    }
+
     push(cmd, out, ok, meta) {
       if (!this.body) return;
       const ts = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });

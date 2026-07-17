@@ -2,6 +2,20 @@
   "owner": "（本地填写，勿提交）",
   "ownerEn": "",
   "headquarters": ".",
+  "projects": [
+    {
+      "id": "juno-hq",
+      "label": "Juno 总部",
+      "path": ".",
+      "aliases": ["juno", "朱诺", "总部", "my-ai-agent"]
+    },
+    {
+      "id": "my-project",
+      "label": "其他项目（示例）",
+      "path": "../your-other-project",
+      "aliases": ["示例项目"]
+    }
+  ],
   "index": {
     "roots": [
       { "id": "juno-hq", "path": ".", "label": "Juno 总部" },
@@ -9,8 +23,10 @@
     ]
   },
   "tools": {
-    "readPolicy": "sandbox",
+    "readPolicy": "broad",
+    "shellPolicy": "open",
     "roots": [".", "../your-other-project"],
-    "writeRoots": [".", "memory", "knowledge"]
+    "writeRoots": [".", "memory", "knowledge", "__DESKTOP__", "../your-other-project"],
+    "broadReadRoots": ["~", "~/Desktop", "~/Documents", "~/Downloads", "D:\\"]
   }
 }

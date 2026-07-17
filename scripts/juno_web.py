@@ -16,8 +16,8 @@ BROWSER_UA = (
 JUNO_UA = "Juno-Agent/1.1 (+https://github.com)"
 
 
-def _http_get(url: str, *, timeout: float = 15, ua: str = BROWSER_UA) -> str:
-    req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Language": "en-US,en;q=0.9"})
+def _http_get(url: str, *, timeout: float = 8, ua: str = BROWSER_UA) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": ua, "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
@@ -42,7 +42,8 @@ def _ddg_instant(query: str, max_results: int) -> list[dict]:
     results: list[dict] = []
     try:
         req = urllib.request.Request(ia_url, headers={"User-Agent": JUNO_UA})
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        # Short timeout — DDG often blocked in CN; don't burn the whole budget
+        with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         abstract = (data.get("AbstractText") or "").strip()
         if abstract:
@@ -82,11 +83,62 @@ def _ddg_instant(query: str, max_results: int) -> list[dict]:
     return results[:max_results]
 
 
-def _ddg_html(query: str, max_results: int) -> list[dict]:
+def _bing_html(query: str, max_results: int) -> list[dict]:
+    """Bing HTML search — usually reachable in China without VPN."""
     results: list[dict] = []
     endpoints = [
+        "https://cn.bing.com/search?" + urllib.parse.urlencode({"q": query, "setlang": "zh-CN"}),
+        "https://www.bing.com/search?" + urllib.parse.urlencode({"q": query, "setlang": "zh-CN"}),
+    ]
+    # Bing SERP: <li class="b_algo"> … <h2><a href="…">title</a></h2> … <p>snippet</p>
+    algo_re = re.compile(
+        r'<li[^>]*class="[^"]*\bb_algo\b[^"]*"[^>]*>([\s\S]*?)</li>',
+        re.I,
+    )
+    link_re = re.compile(r'<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)</a>', re.I)
+    snippet_re = re.compile(r'<p[^>]*>([\s\S]*?)</p>', re.I)
+    tag_re = re.compile(r"<[^>]+>")
+
+    for html_url in endpoints:
+        if len(results) >= max_results:
+            break
+        try:
+            html = _http_get(html_url, timeout=6)
+        except Exception:
+            continue
+        for block in algo_re.finditer(html):
+            chunk = block.group(1)
+            m = link_re.search(chunk)
+            if not m:
+                continue
+            url = unescape(m.group(1)).strip()
+            title = tag_re.sub("", unescape(m.group(2))).strip()
+            if not url.startswith("http"):
+                continue
+            if "bing.com" in url and "/search" in url:
+                continue
+            sn = snippet_re.search(chunk)
+            snippet = tag_re.sub("", unescape(sn.group(1))).strip() if sn else ""
+            results.append(
+                {
+                    "title": title[:160],
+                    "url": url,
+                    "snippet": snippet[:240],
+                    "source": "bing-html",
+                }
+            )
+            if len(results) >= max_results:
+                break
+        if results:
+            break
+    return results[:max_results]
+
+
+def _ddg_html(query: str, max_results: int) -> list[dict]:
+    results: list[dict] = []
+    # One endpoint only — second lite URL often stalls behind the firewall
+    endpoints = [
         "https://html.duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query}),
-        "https://lite.duckduckgo.com/lite/?" + urllib.parse.urlencode({"q": query}),
     ]
     patterns = [
         re.compile(
@@ -102,7 +154,7 @@ def _ddg_html(query: str, max_results: int) -> list[dict]:
         if len(results) >= max_results:
             break
         try:
-            html = _http_get(html_url, timeout=18)
+            html = _http_get(html_url, timeout=5)
         except Exception:
             continue
         for pat in patterns:
@@ -155,7 +207,7 @@ def _github_search(query: str, max_results: int) -> list[dict]:
                 "Accept": "application/vnd.github+json",
             },
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=6) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         for item in (data.get("items") or [])[:max_results]:
             results.append(
@@ -211,48 +263,82 @@ def _curated_fallbacks(query: str) -> list[dict]:
 
 
 def web_search(query: str, *, max_results: int = 6) -> dict:
+    """Search with a hard wall-clock budget — never hang the agent loop."""
+    import threading
+    import time as _time
+
     q = (query or "").strip()
     if not q:
         return {"ok": False, "error": "query required"}
 
-    results: list[dict] = []
-    providers_tried: list[str] = []
+    box: dict = {}
 
-    for fn, name in (
-        (_github_search, "github"),
-        (_ddg_instant, "ddg-instant"),
-        (_ddg_html, "ddg-html"),
-    ):
-        if len(results) >= max_results:
-            break
-        providers_tried.append(name)
-        try:
-            chunk = fn(q, max_results)
-            results.extend(chunk)
-            results = _dedupe_results(results)[:max_results]
-        except Exception:
-            continue
+    def _run() -> None:
+        results: list[dict] = []
+        providers_tried: list[str] = []
+        t0 = _time.monotonic()
+        budget_s = 7.0
 
-    if len(results) < max_results:
-        providers_tried.append("curated")
-        results = _dedupe_results(results + _curated_fallbacks(q))[:max_results]
+        def _left() -> float:
+            return budget_s - (_time.monotonic() - t0)
 
-    abstract = next((r.get("snippet") for r in results if r.get("snippet")), "")
+        # CN-first: Bing usually works; DDG often blocked and must not burn budget first
+        for fn, name in (
+            (_bing_html, "bing"),
+            (_ddg_instant, "ddg-instant"),
+            (_github_search, "github"),
+            (_ddg_html, "ddg-html"),
+        ):
+            if len(results) >= max_results or _left() < 1.0:
+                break
+            providers_tried.append(name)
+            try:
+                chunk = fn(q, max_results)
+                results.extend(chunk or [])
+                results = _dedupe_results(results)[:max_results]
+            except Exception:
+                continue
 
-    if not results:
-        return {
-            "ok": False,
-            "error": "未找到搜索结果",
-            "hint": "请用 web_fetch 打开具体 URL，例如 GitHub 仓库 README",
-            "suggested_urls": [r["url"] for r in _curated_fallbacks(q) if r.get("url")][:4],
-            "providers_tried": providers_tried,
+        if len(results) < max_results:
+            providers_tried.append("curated")
+            results = _dedupe_results(results + _curated_fallbacks(q))[:max_results]
+
+        abstract = next((r.get("snippet") for r in results if r.get("snippet")), "")
+        elapsed_ms = int((_time.monotonic() - t0) * 1000)
+        if not results:
+            box["r"] = {
+                "ok": False,
+                "error": "未找到搜索结果（网络超时或无命中）",
+                "hint": "用已知知识做最合理假设并交付；或 web_fetch 打开具体 URL",
+                "suggested_urls": [r["url"] for r in _curated_fallbacks(q) if r.get("url")][:4],
+                "providers_tried": providers_tried,
+                "elapsed_ms": elapsed_ms,
+            }
+            return
+        box["r"] = {
+            "ok": True,
+            "query": q,
+            "results": results,
+            "abstract": abstract,
+            "providers": list({r.get("source") for r in results if r.get("source")}),
+            "hint": "读完 results 后总结；要图则直接出 mermaid/chart。可用 web_fetch 抓全文",
+            "elapsed_ms": elapsed_ms,
         }
 
-    return {
-        "ok": True,
-        "query": q,
-        "results": results,
-        "abstract": abstract,
-        "providers": list({r.get("source") for r in results if r.get("source")}),
-        "hint": "可用 web_fetch 抓取 results[].url 获取全文",
-    }
+    th = threading.Thread(target=_run, daemon=True)
+    th.start()
+    th.join(8.0)
+    if th.is_alive() or "r" not in box:
+        # Network stalled — still return something so Agent can keep going
+        fb = _curated_fallbacks(q)
+        return {
+            "ok": True,
+            "query": q,
+            "results": fb,
+            "abstract": "",
+            "providers": ["timeout-fallback"],
+            "hint": "网络搜索超时；以下为兜底链接。请结合常识假设直接交付，勿空等。",
+            "elapsed_ms": 8000,
+            "timed_out": True,
+        }
+    return box["r"]

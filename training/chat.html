@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
-  <link rel="stylesheet" href="/cursor-ui.css?v=27" />
-  <link rel="stylesheet" href="/cursor-layout.css?v=27" />
+  <link rel="stylesheet" href="/cursor-ui.css?v=32" />
+  <link rel="stylesheet" href="/cursor-layout.css?v=32" />
   <style>
     :root {
       --bg0: #1e1e1e;
@@ -71,14 +71,18 @@
       overflow-x: hidden;
     }
     .rail-brand {
-      width: 28px; height: 28px; border-radius: 6px;
-      background: #3794ff; color: #fff;
+      width: 32px; height: 32px; border-radius: 8px;
+      background: transparent; color: #fff;
       font-weight: 700; font-size: .78rem;
       display: grid; place-items: center;
       margin-bottom: .55rem; flex-shrink: 0;
-      border: none; cursor: pointer;
+      border: none; cursor: pointer; overflow: hidden;
+      padding: 0;
     }
-    .rail-brand:hover { background: #4da3ff; }
+    .rail-brand img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+    .rail-brand:hover { opacity: .92; }
     .rail-divider {
       width: 22px; height: 1px;
       background: rgba(255,255,255,.1);
@@ -147,8 +151,725 @@
     /* History sidebar — layout in cursor-layout.css (.cursor-history) */
     .sessions { flex: 1; min-height: 0; overflow-y: auto; }
 
-    /* legacy avatar — hidden */
-    .juno-avatar, .user-avatar, .juno-glow, .juno-orbit { display: none !important; }
+    /* Juno voice orb — reference skin PNG + look-follow */
+    .juno-orb {
+      --lx: 0;
+      --ly: 0;
+      width: 100%; height: 100%;
+      position: relative; z-index: 2;
+      display: grid; place-items: center;
+      perspective: 600px;
+      filter: drop-shadow(0 4px 14px rgba(60, 40, 180, .35));
+    }
+    .juno-orb-core {
+      width: 92%; height: 92%; border-radius: 50%;
+      position: relative; overflow: hidden;
+      transform-style: preserve-3d;
+      transform:
+        rotateY(calc(var(--lx) * 28deg))
+        rotateX(calc(var(--ly) * -14deg));
+      transition: transform .08s linear;
+      background: #000;
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,.28),
+        0 0 0 1px rgba(255,255,255,.05);
+    }
+    .juno-orb-skin {
+      position: absolute; inset: -2%;
+      width: 104%; height: 104%;
+      object-fit: cover; border-radius: 50%;
+      transform: translate3d(calc(var(--lx) * -3%), calc(var(--ly) * -2%), 0) scale(1.02);
+      transition: transform .08s linear;
+      pointer-events: none; user-select: none;
+    }
+    .juno-orb-vid {
+      /* video element needs block sizing */
+      display: block;
+      background: #000;
+    }
+    /* Choreographed mp4 already turns + smiles — don't stack CSS look */
+    .juno-orb--video .juno-orb-core {
+      transform: none;
+    }
+    .juno-orb--video .juno-orb-skin {
+      inset: auto; left: 50%; top: 50%;
+      width: 118%; height: 118%;
+      transform: translate(-50%, -50%);
+      object-fit: cover;
+      object-position: center;
+    }
+    .juno-orb-smile {
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .juno-orb--video[data-expr="smile"] .juno-orb-vid {
+      opacity: 0;
+    }
+    .juno-orb--video[data-expr="smile"] .juno-orb-smile {
+      opacity: 1;
+    }
+    .juno-orb-face-nudge {
+      position: absolute; inset: 0; z-index: 2; pointer-events: none;
+      background: radial-gradient(circle at calc(50% + var(--lx) * 10%) calc(48% + var(--ly) * 8%),
+        transparent 12%, rgba(0,0,0,.06) 42%, rgba(0,0,0,.18) 78%);
+      mix-blend-mode: multiply; opacity: .5;
+    }
+    .juno-orb-world {
+      position: absolute; inset: -6%;
+      transform: translate3d(calc(var(--lx) * -5%), calc(var(--ly) * -3%), 0);
+      transition: transform .1s linear;
+    }
+    .juno-orb-plasma {
+      position: absolute; inset: -32%;
+      animation: juno-orb-spin 18s linear infinite;
+      will-change: transform;
+    }
+    .juno-orb-ribbon {
+      position: absolute; border-radius: 50%;
+      filter: blur(7px); opacity: .95;
+      mix-blend-mode: screen;
+    }
+    .juno-orb-ribbon.r1 {
+      width: 92%; height: 58%; left: -8%; top: 18%;
+      background: linear-gradient(105deg, transparent 8%, var(--orb-indigo) 28%, var(--orb-violet) 48%, transparent 70%);
+      animation: juno-orb-wave 8s ease-in-out infinite;
+    }
+    .juno-orb-ribbon.r2 {
+      width: 78%; height: 52%; right: -12%; top: 26%;
+      background: linear-gradient(210deg, transparent 10%, var(--orb-orange) 36%, var(--orb-gold) 52%, transparent 78%);
+      filter: blur(6px);
+      animation: juno-orb-wave 6.2s ease-in-out infinite reverse;
+      animation-delay: -.8s;
+    }
+    .juno-orb-ribbon.r3 {
+      width: 96%; height: 64%; left: 2%; bottom: 2%;
+      background: linear-gradient(35deg, var(--orb-violet) 10%, var(--orb-magenta) 38%, transparent 68%);
+      opacity: .72;
+      animation: juno-orb-wave 10s ease-in-out infinite;
+      animation-delay: -2s;
+    }
+    .juno-orb-ribbon.r4,
+    .juno-orb-bloom {
+      width: 55%; height: 40%; left: 22%; top: 34%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(255,130,40,.7), rgba(255,90,40,.25) 45%, transparent 70%);
+      filter: blur(9px);
+      animation: juno-orb-bloom 4.8s ease-in-out infinite;
+    }
+    .juno-orb-veil {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      background: radial-gradient(circle at 50% 48%, transparent 18%, rgba(0,0,8,.32) 62%, rgba(0,0,0,.5) 100%);
+    }
+    .juno-orb-face {
+      position: absolute; inset: 0; z-index: 3;
+      display: grid; place-items: center;
+      transform: translate3d(calc(var(--lx) * 12%), calc(var(--ly) * 8%), 16px);
+      transition: transform .08s linear;
+    }
+    .juno-orb-eyes {
+      display: flex; align-items: center; justify-content: center;
+      gap: 13%; width: 42%; height: 34%;
+    }
+    .juno-orb-eyes i {
+      display: block; width: 22%; height: 100%;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 0 8px rgba(255,255,255,.55);
+      animation: juno-orb-blink 5.8s ease-in-out infinite;
+    }
+    .juno-orb-eyes i:nth-child(2) { animation-delay: .1s; }
+    .juno-orb-shine {
+      position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      background:
+        radial-gradient(ellipse 48% 30% at 30% 20%, rgba(255,255,255,.62), transparent 68%),
+        radial-gradient(ellipse 26% 16% at 74% 76%, rgba(255,255,255,.2), transparent 70%);
+    }
+    /* Skin PNG already has glass — keep overlay subtle */
+    .juno-orb--skin .juno-orb-shine {
+      background:
+        radial-gradient(ellipse 42% 26% at 28% 18%, rgba(255,255,255,.22), transparent 68%),
+        radial-gradient(ellipse 20% 12% at 74% 78%, rgba(255,255,255,.08), transparent 70%);
+    }
+    .juno-orb-rim {
+      position: absolute; inset: 0; z-index: 5; pointer-events: none; border-radius: 50%;
+      box-shadow:
+        inset 0 0 0 1.5px rgba(255,255,255,.34),
+        inset 0 0 18px rgba(255,255,255,.1),
+        inset 0 -6px 14px rgba(120,160,255,.12);
+    }
+    .juno-sprite .juno-orb { width: 100%; height: 100%; }
+    .juno-sprite-glow {
+      background: radial-gradient(circle, rgba(255,122,26,.22), rgba(91,45,255,.28) 42%, transparent 70%) !important;
+    }
+
+    /* Orb reacts to chat states */
+    .juno-sprite-wrap[data-state="idle"] .juno-orb:not(.juno-orb--video) {
+      animation: juno-float 4.2s ease-in-out infinite;
+    }
+    /* Idle video: soft float + breathe — alive, not the full turn clip */
+    .juno-sprite-wrap[data-state="idle"] .juno-orb--video,
+    .juno-sprite-wrap[data-state="done"] .juno-orb--video {
+      animation: juno-orb-idle-float 5.2s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-orb--video .juno-orb-skin,
+    .juno-sprite-wrap[data-state="done"] .juno-orb--video .juno-orb-skin,
+    .juno-sprite-wrap[data-state="idle"] .juno-orb--video[data-expr="smile"] .juno-orb-smile,
+    .juno-sprite-wrap[data-state="done"] .juno-orb--video[data-expr="smile"] .juno-orb-smile {
+      animation: juno-orb-idle-breathe 4.6s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-orb--video .juno-orb-shine,
+    .juno-sprite-wrap[data-state="done"] .juno-orb--video .juno-orb-shine {
+      animation: juno-orb-idle-glow 4.6s ease-in-out infinite;
+    }
+    .juno-sprite-wrap.juno-idle-nudge .juno-orb--video {
+      animation: juno-orb-idle-float 5.2s ease-in-out infinite, juno-orb-idle-nudge .85s ease-out;
+    }
+    @keyframes juno-orb-idle-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3.5%); }
+    }
+    @keyframes juno-orb-idle-breathe {
+      0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        filter: brightness(1) saturate(1);
+      }
+      50% {
+        transform: translate(-50%, -50%) scale(1.04);
+        filter: brightness(1.06) saturate(1.08);
+      }
+    }
+    @keyframes juno-orb-idle-glow {
+      0%, 100% { opacity: .72; }
+      50% { opacity: 1; }
+    }
+    @keyframes juno-orb-idle-nudge {
+      0% { transform: translateY(0) scale(1); }
+      40% { transform: translateY(-6%) scale(1.04); }
+      100% { transform: translateY(0) scale(1); }
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-orb-skin,
+    .juno-sprite-wrap[data-state="planning"] .juno-orb-skin {
+      filter: saturate(1.15) brightness(1.06);
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-orb-skin {
+      filter: saturate(1.25) brightness(1.1);
+    }
+    .juno-sprite-wrap[data-state="tool"] .juno-orb-core {
+      filter: hue-rotate(-12deg) saturate(1.1);
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-orb-plasma,
+    .juno-sprite-wrap[data-state="planning"] .juno-orb-plasma {
+      animation-duration: 7s;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-orb-ribbon,
+    .juno-sprite-wrap[data-state="planning"] .juno-orb-ribbon {
+      animation-duration: 3.6s;
+      filter: blur(6px) saturate(1.25);
+    }
+    .juno-sprite-wrap[data-state="tool"] .juno-orb-plasma { animation-duration: 5.5s; }
+    .juno-sprite-wrap[data-state="streaming"] .juno-orb-plasma { animation-duration: 4.5s; }
+    .juno-sprite-wrap[data-state="streaming"] .juno-orb-ribbon {
+      animation-duration: 2.8s;
+      filter: blur(5px) saturate(1.35) brightness(1.08);
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-orb-eyes i {
+      animation: juno-orb-talk 0.55s ease-in-out infinite alternate;
+    }
+    .juno-sprite-wrap[data-state="done"] .juno-orb {
+      animation: juno-happy-jump .7s cubic-bezier(.34,1.3,.64,1);
+    }
+
+    @keyframes juno-orb-spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes juno-orb-wave {
+      0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+      33% { transform: translate(4%, -3%) rotate(8deg) scale(1.04); }
+      66% { transform: translate(-3%, 4%) rotate(-6deg) scale(.97); }
+    }
+    @keyframes juno-orb-bloom {
+      0%, 100% { opacity: .55; transform: scale(1); }
+      50% { opacity: .9; transform: scale(1.08); }
+    }
+    @keyframes juno-orb-blink {
+      0%, 42%, 46%, 100% { transform: scaleY(1); opacity: 1; }
+      44% { transform: scaleY(0.18); opacity: .85; }
+    }
+    @keyframes juno-orb-talk {
+      from { transform: scaleY(0.85) translateY(4%); }
+      to { transform: scaleY(1.12) translateY(-2%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .juno-orb-plasma,
+      .juno-orb-ribbon,
+      .juno-orb-ribbon.r4,
+      .juno-orb-bloom,
+      .juno-orb-eyes i,
+      .juno-sprite-wrap[data-state] .juno-orb,
+      .juno-sprite-wrap[data-state] .juno-orb--video .juno-orb-skin,
+      .juno-sprite-wrap[data-state] .juno-orb--video .juno-orb-shine {
+        animation: none !important;
+      }
+      .juno-orb-core,
+      .juno-orb-face,
+      .juno-orb-world {
+        transition: none !important;
+      }
+    }
+
+    /* Legacy SVG sprite hooks (no longer used — keep harmless) */
+    .juno-avatar { display: none !important; }
+    .juno-sprite-wrap {
+      position: relative; flex-shrink: 0; width: 72px;
+      align-self: flex-start;
+      transition: width .2s ease;
+    }
+    .juno-sprite-wrap.lg { width: 148px; margin: 0 auto; }
+    .juno-companion {
+      display: flex; flex-direction: column; align-items: center; gap: .45rem;
+    }
+    .juno-sprite {
+      width: 48px; height: 48px; padding: 0; border: none;
+      background: transparent; cursor: pointer; position: relative;
+      display: grid; place-items: center; border-radius: 50%;
+      transition: transform .22s cubic-bezier(.34,1.4,.64,1);
+    }
+    .juno-sprite-wrap.lg .juno-sprite { width: 88px; height: 88px; }
+    .juno-sprite:hover { transform: scale(1.06); }
+    .juno-sprite:active { transform: scale(.96); }
+    .juno-sprite .juno-svg {
+      width: 100%; height: 100%; object-fit: contain;
+      position: relative; z-index: 2; overflow: visible;
+      filter: drop-shadow(0 3px 12px rgba(155,107,255,.22));
+    }
+    .juno-sprite-glow {
+      position: absolute; inset: -10px; border-radius: 50%; z-index: 1;
+      background: radial-gradient(circle, rgba(217,119,87,.18), rgba(155,107,255,.14) 45%, transparent 70%);
+      opacity: .5; transition: opacity .3s, transform .3s;
+      animation: juno-aura-idle 5s ease-in-out infinite;
+    }
+    .juno-sprite-wrap.lg .juno-sprite-glow { inset: -16px; }
+    .juno-orbit {
+      position: absolute; inset: -2px; border-radius: 50%; z-index: 0;
+      border: 1px solid rgba(217,119,87,0);
+      transition: border-color .3s, opacity .3s;
+    }
+    .juno-think-ring {
+      position: absolute; inset: -4px; border-radius: 50%; z-index: 0;
+      border: 2px solid rgba(155,107,255,0);
+      opacity: 0; pointer-events: none;
+      transition: opacity .25s;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-think-ring,
+    .juno-sprite-wrap[data-state="planning"] .juno-think-ring,
+    .juno-sprite-wrap[data-state="tool"] .juno-think-ring {
+      opacity: 1;
+      border-color: rgba(155,107,255,.45);
+      animation: juno-ring-pulse 1.6s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="planning"] .juno-think-ring {
+      border-color: rgba(217,119,87,.5);
+      animation: juno-ring-plan 2.2s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="tool"] .juno-think-ring {
+      border-color: rgba(55,148,255,.5);
+      animation: juno-ring-tool 1.4s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-think-ring {
+      opacity: 0;
+    }
+    .juno-sprite-wrap.juno-session-active .juno-sprite-glow {
+      opacity: .88 !important;
+    }
+    .juno-sprite-wrap.reply-settled .juno-mood,
+    .juno-sprite-wrap.reply-settled .juno-think-ring {
+      display: none !important;
+      opacity: 0 !important;
+    }
+    .juno-sprite-wrap.reply-settled .juno-sprite-glow {
+      opacity: .42 !important;
+      animation: juno-aura-idle 5s ease-in-out infinite !important;
+    }
+    .msg.assistant .msg-row.streaming-turn .juno-sprite-wrap {
+      transform: translateX(2px);
+      transition: transform .35s ease;
+    }
+    .juno-svg .juno-ear { transform-origin: center; transform-box: fill-box; }
+    .juno-svg .juno-mote-a, .juno-svg .juno-mote-b { transform-origin: center; }
+    .juno-sprite-wrap[data-state="idle"] .juno-svg .juno-mote-a {
+      animation: juno-mote-drift 4.5s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-svg .juno-mote-b {
+      animation: juno-mote-drift 5.2s ease-in-out infinite reverse;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-svg .juno-ear-l {
+      animation: juno-ear-perk .9s ease-in-out infinite alternate;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-svg .juno-ear-r {
+      animation: juno-ear-perk .9s ease-in-out infinite alternate-reverse;
+    }
+    .juno-mood-dots {
+      display: none; gap: 2px; align-items: center; margin-left: .15rem;
+    }
+    .juno-mood-dots i {
+      width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .45;
+      animation: juno-dot-bounce 1.2s ease-in-out infinite;
+    }
+    .juno-mood-dots i:nth-child(2) { animation-delay: .15s; }
+    .juno-mood-dots i:nth-child(3) { animation-delay: .3s; }
+    .juno-mood.busy .juno-mood-dots { display: inline-flex; }
+    .juno-mood.busy .juno-mood-dot { display: none; }
+    .juno-sprite-spark { display: none; }
+    .juno-svg .juno-body-wrap { transform-origin: 32px 36px; }
+    .juno-svg .juno-halo-wrap { transform-origin: 32px 12px; }
+    .juno-svg .juno-eye { transform-origin: center; transform-box: fill-box; }
+    .juno-svg .juno-eyes { transform-origin: 32px 33px; }
+    .juno-svg .juno-mouth { transform-origin: 32px 38px; transform-box: fill-box; }
+    .juno-svg .juno-wisp { transform-origin: 32px 52px; }
+    /* 待机：轻柔漂浮 */
+    .juno-sprite-wrap[data-state="idle"] .juno-sprite .juno-svg {
+      animation: juno-float 4.2s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-svg .juno-body-wrap {
+      animation: juno-breathe 4.8s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-svg .juno-halo-wrap {
+      animation: juno-halo-idle 6s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-svg .juno-eye {
+      animation: juno-blink 6.5s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"] .juno-svg .juno-wisp {
+      animation: juno-wisp-idle 3.5s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="idle"]:hover .juno-sprite-glow {
+      opacity: .72; transform: scale(1.04);
+    }
+    /* 思考：轻歪头 + 光晕呼吸（不疯狂旋转） */
+    .juno-sprite-wrap[data-state="thinking"] .juno-sprite-glow {
+      opacity: .85; animation: juno-glow-think 2.2s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-sprite .juno-svg {
+      animation: juno-float 3s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-svg .juno-body-wrap {
+      animation: juno-think-sway 2.8s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-svg .juno-halo-wrap {
+      animation: juno-halo-think 2.4s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-svg .juno-eyes {
+      animation: juno-look-up 2.8s ease-in-out infinite;
+    }
+    /* 工具：专注轻点 */
+    .juno-sprite-wrap[data-state="tool"] .juno-sprite-glow {
+      opacity: .8; animation: juno-glow-tool 1.8s ease-in-out infinite;
+      background: radial-gradient(circle, rgba(55,148,255,.2), rgba(155,107,255,.12) 50%, transparent 72%);
+    }
+    .juno-sprite-wrap[data-state="tool"] .juno-svg .juno-body-wrap {
+      animation: juno-tool-focus 1.6s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="tool"] .juno-svg .juno-halo-wrap {
+      animation: juno-halo-tool 2s ease-in-out infinite;
+    }
+    /* 回答：温暖陪伴感 */
+    .juno-sprite-wrap[data-state="streaming"] .juno-sprite-glow {
+      opacity: .9; animation: juno-glow-warm 2s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-orbit {
+      border-color: rgba(217,119,87,.35);
+      animation: juno-orbit-breathe 3s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-sprite .juno-svg {
+      animation: juno-stream-nod 2.4s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-svg .juno-mouth {
+      animation: juno-talk .55s ease-in-out infinite alternate;
+    }
+    /* 完成 */
+    .juno-sprite-wrap[data-state="done"] .juno-sprite .juno-svg {
+      animation: juno-happy-jump .7s cubic-bezier(.34,1.3,.64,1);
+    }
+    .juno-sprite-wrap[data-state="done"] .juno-svg .juno-mouth {
+      animation: juno-smile-wide .7s ease;
+    }
+    .juno-sprite-wrap[data-state="done"] .juno-sprite-glow {
+      opacity: .75; background: radial-gradient(circle, rgba(137,209,133,.22), rgba(155,107,255,.1) 55%, transparent 72%);
+    }
+    /* Claude 式陪伴气泡 */
+    .juno-mood {
+      display: none; align-items: flex-start; gap: .35rem;
+      max-width: 7.5rem; padding: .38rem .55rem;
+      border-radius: 12px 12px 12px 4px;
+      background: rgba(37,37,38,.94);
+      border: 1px solid rgba(217,119,87,.22);
+      font-size: .64rem; line-height: 1.35; color: #e8dfd6;
+      text-align: left;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(0,0,0,.22);
+      animation: juno-mood-in .28s ease;
+    }
+    .juno-sprite-wrap.lg .juno-mood {
+      max-width: 200px; font-size: .72rem; padding: .45rem .65rem;
+      border-radius: 14px 14px 14px 5px;
+    }
+    .juno-mood-text { transition: opacity .15s ease; }
+    .juno-mood-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+      margin-top: .22rem;
+      background: #d97757;
+      animation: pulse-dot 1.4s ease infinite;
+    }
+    /* 规划：慢节奏摆头 + 暖色光晕 */
+    .juno-sprite-wrap[data-state="planning"] .juno-sprite-glow {
+      opacity: .88; animation: juno-glow-plan 2.4s ease-in-out infinite;
+      background: radial-gradient(circle, rgba(217,119,87,.24), rgba(155,107,255,.12) 50%, transparent 72%);
+    }
+    .juno-sprite-wrap[data-state="planning"] .juno-sprite .juno-svg {
+      animation: juno-float 3.2s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="planning"] .juno-svg .juno-body-wrap {
+      animation: juno-plan-sway 3s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="planning"] .juno-svg .juno-halo-wrap {
+      animation: juno-halo-plan 2.8s ease-in-out infinite;
+    }
+    .juno-sprite-wrap[data-state="planning"] .juno-mood {
+      border-color: rgba(217,119,87,.3); color: #f0e0d0;
+    }
+    .juno-sprite-wrap[data-state="planning"] .juno-mood-dot { background: #d97757; }
+    .juno-sprite-wrap[data-state="thinking"] .juno-mood,
+    .juno-sprite-wrap[data-state="planning"] .juno-mood,
+    .juno-sprite-wrap[data-state="tool"] .juno-mood,
+    .juno-sprite-wrap[data-state="streaming"] .juno-mood,
+    .juno-sprite-wrap[data-state="done"] .juno-mood,
+    .juno-sprite-wrap.peek-open .juno-mood,
+    .juno-sprite-wrap.lg[data-state="idle"] .juno-mood.show-idle {
+      display: inline-flex;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-mood {
+      border-color: rgba(155,107,255,.28); color: #ddd4ff;
+    }
+    .juno-sprite-wrap[data-state="thinking"] .juno-mood-dot { background: #9b6bff; }
+    .juno-sprite-wrap[data-state="tool"] .juno-mood {
+      border-color: rgba(55,148,255,.28); color: #c8e4ff;
+    }
+    .juno-sprite-wrap[data-state="tool"] .juno-mood-dot { background: #3794ff; }
+    .juno-sprite-wrap[data-state="streaming"] .juno-mood {
+      border-color: rgba(217,119,87,.32); color: #f5e6d8;
+    }
+    .juno-sprite-wrap[data-state="streaming"] .juno-mood-dot { background: #d97757; }
+    .juno-sprite-wrap[data-state="done"] .juno-mood {
+      border-color: rgba(137,209,133,.35); color: #d4f0d0;
+    }
+    .juno-sprite-wrap[data-state="done"] .juno-mood-dot {
+      background: var(--ok); animation: none;
+    }
+    @keyframes juno-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    @keyframes juno-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.03); }
+    }
+    @keyframes juno-blink {
+      0%, 44%, 48%, 100% { transform: scaleY(1); }
+      46% { transform: scaleY(0.15); }
+    }
+    @keyframes juno-halo-idle {
+      0%, 100% { transform: rotate(-4deg); opacity: .85; }
+      50% { transform: rotate(4deg); opacity: 1; }
+    }
+    @keyframes juno-wisp-idle {
+      0%, 100% { opacity: .3; transform: scaleX(1); }
+      50% { opacity: .5; transform: scaleX(1.08); }
+    }
+    @keyframes juno-think-sway {
+      0%, 100% { transform: rotate(-2deg); }
+      50% { transform: rotate(3deg); }
+    }
+    @keyframes juno-halo-think {
+      0%, 100% { transform: rotate(-6deg) scale(1); opacity: .9; }
+      50% { transform: rotate(6deg) scale(1.04); opacity: 1; }
+    }
+    @keyframes juno-look-up {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-1.5px); }
+    }
+    @keyframes juno-tool-focus {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-2px) scale(1.02); }
+    }
+    @keyframes juno-halo-tool {
+      0%, 100% { opacity: .75; }
+      50% { opacity: 1; }
+    }
+    @keyframes juno-stream-nod {
+      0%, 100% { transform: translateY(0); }
+      45% { transform: translateY(1.5px); }
+      55% { transform: translateY(-2px); }
+    }
+    @keyframes juno-talk {
+      from { transform: scaleY(1); }
+      to { transform: scaleY(1.2); }
+    }
+    @keyframes juno-happy-jump {
+      0% { transform: translateY(0) scale(1); }
+      40% { transform: translateY(-6px) scale(1.04); }
+      100% { transform: translateY(0) scale(1); }
+    }
+    @keyframes juno-smile-wide {
+      0% { transform: scaleX(1); }
+      50% { transform: scaleX(1.12); }
+      100% { transform: scaleX(1); }
+    }
+    @keyframes juno-glow-think {
+      0%, 100% { opacity: .65; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.05); }
+    }
+    @keyframes juno-glow-tool {
+      0%, 100% { opacity: .6; }
+      50% { opacity: .95; }
+    }
+    @keyframes juno-glow-warm {
+      0%, 100% { opacity: .7; }
+      50% { opacity: 1; }
+    }
+    @keyframes juno-aura-idle {
+      0%, 100% { opacity: .42; transform: scale(1); }
+      50% { opacity: .58; transform: scale(1.02); }
+    }
+    @keyframes juno-orbit-breathe {
+      0%, 100% { transform: scale(1); opacity: .6; }
+      50% { transform: scale(1.03); opacity: 1; }
+    }
+    @keyframes juno-ring-pulse {
+      0%, 100% { transform: scale(1); opacity: .55; }
+      50% { transform: scale(1.08); opacity: 1; }
+    }
+    @keyframes juno-ring-plan {
+      0%, 100% { transform: scale(1) rotate(-3deg); opacity: .5; }
+      50% { transform: scale(1.1) rotate(3deg); opacity: 1; }
+    }
+    @keyframes juno-ring-tool {
+      0%, 100% { transform: scale(1); opacity: .6; }
+      50% { transform: scale(1.06); opacity: 1; }
+    }
+    @keyframes juno-ring-stream {
+      0%, 100% { transform: scale(1); opacity: .45; }
+      50% { transform: scale(1.05); opacity: .85; }
+    }
+    @keyframes juno-dot-bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: .35; }
+      40% { transform: translateY(-3px); opacity: 1; }
+    }
+    @keyframes juno-glow-plan {
+      0%, 100% { opacity: .7; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.06); }
+    }
+    @keyframes juno-plan-sway {
+      0%, 100% { transform: rotate(-1.5deg) translateY(0); }
+      50% { transform: rotate(2deg) translateY(-2px); }
+    }
+    @keyframes juno-halo-plan {
+      0%, 100% { transform: rotate(-8deg); }
+      50% { transform: rotate(8deg); }
+    }
+    @keyframes juno-idle-glance {
+      0%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-3px) rotate(-2deg); }
+      60% { transform: translateY(-1px) rotate(2deg); }
+    }
+    @keyframes juno-mote-drift {
+      0%, 100% { transform: translate(0, 0); opacity: .35; }
+      50% { transform: translate(2px, -3px); opacity: .75; }
+    }
+    @keyframes juno-ear-perk {
+      from { transform: rotate(-6deg) translateY(0); }
+      to { transform: rotate(4deg) translateY(-1px); }
+    }
+    @keyframes juno-mood-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: none; }
+    }
+    .juno-sprite-wrap.lg.juno-idle-alive[data-state="idle"] .juno-sprite .juno-svg {
+      animation: juno-float 4.2s ease-in-out infinite, juno-idle-glance 8s ease-in-out infinite;
+    }
+    .juno-sprite-wrap.juno-idle-nudge .juno-sprite .juno-svg {
+      animation: juno-happy-jump .75s cubic-bezier(.34,1.3,.64,1);
+    }
+    .juno-speech { display: none !important; }
+    .user-avatar, .juno-glow, .juno-orbit-old { display: none !important; }
+
+    /* Welcome hero */
+    .welcome-hero {
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; padding: 2.5rem 1rem 1.5rem;
+      max-width: 520px; margin: 0 auto;
+    }
+    .welcome-hero h3 {
+      margin: 1rem 0 .4rem; font-size: 1.35rem; font-weight: 600;
+      color: #e8e8e8;
+    }
+    .welcome-hero .welcome-tagline {
+      color: var(--muted); line-height: 1.6; margin: 0 0 1.25rem;
+      font-size: .88rem;
+    }
+    .welcome-chips {
+      display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center;
+    }
+    .welcome-chip {
+      border: 1px solid rgba(55,148,255,.25);
+      background: rgba(55,148,255,.08);
+      color: #b8d4ff; border-radius: 999px;
+      padding: .42rem .85rem; font-size: .8rem; cursor: pointer;
+      transition: background .15s, transform .15s;
+    }
+    .welcome-chip:hover {
+      background: rgba(55,148,255,.16); transform: translateY(-1px);
+    }
+    .msg.assistant .msg-row {
+      display: flex; gap: .7rem; align-items: flex-start; width: 100%;
+    }
+    .msg.assistant .juno-sprite-wrap { z-index: 1; margin-top: .15rem; }
+    .msg.assistant .msg-content {
+      flex: 1; min-width: 0; width: 100%; position: relative; z-index: 2;
+      background: rgba(255,255,255,.028);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 14px;
+      padding: .7rem .85rem .55rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,.12);
+    }
+    .msg.assistant .msg-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: .42rem; min-height: 1.1rem;
+    }
+    .msg.assistant .msg-name {
+      font-size: .76rem; font-weight: 600; color: #a8b8d8;
+      letter-spacing: .03em;
+    }
+    .msg.assistant .msg-head .msg-actions {
+      margin: 0; padding: 0; border: none; opacity: .55;
+    }
+    .msg.assistant:hover .msg-head .msg-actions,
+    .msg.assistant .msg-head .msg-actions:focus-within { opacity: 1; }
+
+    /* Error cards */
+    .error-card {
+      padding: .85rem 1rem; border-radius: 12px;
+      background: rgba(244,135,113,.08);
+      border: 1px solid rgba(244,135,113,.28);
+      max-width: 100%;
+    }
+    .error-card.balance {
+      background: rgba(255,193,7,.06);
+      border-color: rgba(255,193,7,.28);
+    }
+    .error-card h4 { margin: 0 0 .35rem; font-size: .92rem; color: #f0c674; }
+    .error-card p { margin: 0; font-size: .84rem; line-height: 1.55; color: #ccc; }
+    .error-card a { color: #79b8ff; }
 
     /* Main — flex column like Cursor agent panel */
     .main {
@@ -265,16 +986,15 @@
     }
     .messages:has(.welcome) {
       flex: 1;
-      justify-content: flex-start;
+      justify-content: center;
       align-items: stretch;
       min-height: auto;
-      padding-top: 1.25rem;
+      padding-top: 0;
     }
     .welcome {
       margin: 0; text-align: left; max-width: 100%; width: 100%; padding: 0;
       animation: fade-up .35s ease;
     }
-    .welcome .juno-avatar.lg { display: none; }
     .welcome h3 { margin: 0 0 .35rem; font-size: 1.1rem; font-weight: 600; color: var(--text); }
     .welcome p { color: var(--muted); line-height: 1.55; margin: 0; font-size: .88rem; }
     .scroll-fab {
@@ -289,25 +1009,26 @@
     }
     .scroll-fab.show { transform: translateX(-50%) translateY(0); opacity: 1; pointer-events: auto; }
 
-    /* Messages — Cursor turn layout */
-    .msg { display: flex; flex-direction: column; gap: .5rem; width: 100%; animation: msg-in .2s ease; }
+    /* Messages — Claude 留白 + Kiro 灵体侧栏 */
+    .messages { padding: 1rem 1.15rem 1.5rem; gap: 1.1rem; }
+    .msg { display: flex; flex-direction: column; gap: .5rem; width: 100%; animation: msg-in .22s ease; }
     .msg.user { align-items: flex-end; }
     .msg.user .msg-body { display: flex; flex-direction: column; align-items: flex-end; width: 100%; }
     .msg.assistant { max-width: 100%; }
     .msg .msg-body { flex: 1; min-width: 0; width: 100%; }
     .msg-meta, .think-label, .juno-dots { display: none !important; }
 
-    /* User query — Cursor pill */
+    /* User query */
     .user-query {
       align-self: flex-end;
-      max-width: 92%;
-      padding: .55rem .75rem;
-      border-radius: 10px;
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: .88rem;
-      line-height: 1.5;
+      max-width: min(88%, 640px);
+      padding: .62rem .9rem;
+      border-radius: 14px 14px 4px 14px;
+      background: rgba(55,148,255,.1);
+      border: 1px solid rgba(55,148,255,.22);
+      color: #e8edf4;
+      font-size: .9rem;
+      line-height: 1.58;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -428,14 +1149,15 @@
     @keyframes fade-up { from { opacity: 0; transform: translateY(4px); } }
 
     .msg-actions {
-      display: flex; gap: .25rem; margin-top: .45rem; opacity: 0;
+      display: flex; gap: .3rem; margin-top: .5rem; opacity: 0;
       transition: opacity .15s;
     }
+    .msg.user .msg-actions { margin-top: .35rem; }
     .msg:hover .msg-actions, .msg-actions:focus-within { opacity: 1; }
     .msg-act {
-      border: 1px solid var(--border); background: rgba(255,255,255,.03);
-      color: var(--muted); font: inherit; font-size: .7rem; padding: .22rem .5rem;
-      border-radius: 8px; cursor: pointer; transition: all .15s;
+      border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04);
+      color: #9aa8c4; font: inherit; font-size: .68rem; padding: .2rem .48rem;
+      border-radius: 6px; cursor: pointer; transition: all .15s;
     }
     .msg-act:hover { color: var(--text); border-color: var(--border2); background: rgba(255,255,255,.06); }
     .followups {
@@ -450,65 +1172,123 @@
 
     .followups { display: none; }
 
-    /* Cursor tool pills */
-    .tool-stack { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .45rem; width: 100%; }
-    .cursor-tool {
-      display: flex; align-items: center; gap: .45rem;
-      padding: .4rem .6rem; border-radius: 10px;
-      background: var(--bg2); border: 1px solid var(--border);
-      font-size: .76rem; color: var(--muted);
-      transition: border-color .12s, background .12s;
+    /* Cursor CoT rail — Exploring ▾ / nested Read L… / Thinking ▾ */
+    .tool-stack {
+      display: flex; flex-direction: column; gap: 0;
+      margin: 0 0 .55rem 0; width: 100%;
+      padding: .15rem 0 .1rem;
+      background: transparent;
+      border: none;
     }
-    .cursor-tool:hover { background: rgba(255,255,255,.04); }
-    .cursor-tool.active { border-color: rgba(55,148,255,.4); color: var(--text); background: rgba(55,148,255,.06); }
-    .cursor-tool.done { opacity: .8; }
-    .cursor-tool.error { border-color: rgba(244,135,113,.45); color: #f48771; }
-    .cursor-tool-icon {
-      width: 18px; height: 18px; border-radius: 4px;
-      background: rgba(255,255,255,.06);
-      display: grid; place-items: center;
-      flex-shrink: 0; font-size: .65rem;
+    .tool-stack.finished.empty-run { display: none; margin: 0; }
+    /* After finish, Cursor keeps headers; expand peek to re-open bodies */
+    .tool-stack.finished:not(.expanded):not(.peek-open) .rail-sec.collapsed .sec-body { display: none; }
+    .tool-stack.finished:not(.expanded):not(.peek-open) .rail-sec:not(.collapsed) .sec-body { display: flex; }
+    .rail-sec { margin: 0 0 .35rem; }
+    .rail-sec-head {
+      display: flex; align-items: center; gap: .35rem;
+      font-size: .82rem; font-weight: 500; color: #cccccc;
+      cursor: pointer; user-select: none;
+      padding: .1rem 0; width: 100%;
+      background: none; border: none; text-align: left;
+      font-family: inherit;
+    }
+    .rail-sec-head:hover { color: #fff; }
+    .rail-sec-head .sec-chevron {
+      font-size: .65rem; color: #858585; width: .9rem; flex-shrink: 0;
+    }
+    .rail-sec.pending .rail-sec-head { color: #6e6e6e; }
+    .rail-sec.active .rail-sec-head { color: #e8e8e8; }
+    .rail-sec.done .rail-sec-head { color: #9a9a9a; }
+    .rail-sec.active .sec-chevron { color: #cccccc; }
+    .sec-body {
+      display: flex; flex-direction: column; gap: .15rem;
+      padding: .15rem 0 .25rem 1.15rem;
+    }
+    .rail-sec.collapsed .sec-body { display: none; }
+    .cursor-tool {
+      display: flex; flex-direction: column; gap: .05rem;
+      padding: .08rem 0;
+      background: transparent; border: none;
+      font-size: .78rem; color: #858585;
+      animation: juno-step-in .18s ease;
+      font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+      width: 100%; text-align: left;
+    }
+    @keyframes juno-step-in {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .cursor-tool.active { color: #cccccc; }
+    .cursor-tool.done { color: #858585; }
+    .cursor-tool.error { color: #f48771; }
+    .cursor-tool-head {
+      display: flex; align-items: baseline; gap: .35rem;
+      background: none; border: none; padding: 0; margin: 0;
+      width: 100%; cursor: pointer; text-align: left;
+      font: inherit; color: inherit;
+    }
+    .cursor-tool-head:hover { color: #e8e8e8; }
+    .cursor-tool-chevron {
+      font-size: .62rem; color: #6e6e6e; width: .7rem; flex-shrink: 0;
     }
     .cursor-tool-label {
       flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      font-size: .76rem;
+      font-size: .78rem;
     }
-    .cursor-tool-tag { display: none; }
-    .cursor-status {
-      font-size: .74rem; color: var(--muted); margin-bottom: .2rem;
-      display: flex; align-items: center; gap: .35rem;
-      cursor: pointer; user-select: none; width: 100%;
+    .cursor-tool-detail {
+      display: none;
+      padding: .12rem 0 .2rem 1rem;
+      font-size: .72rem; line-height: 1.45; color: #6e6e6e;
+      white-space: pre-wrap; word-break: break-all;
+      font-family: ui-monospace, Consolas, monospace;
     }
-    .cursor-status:hover { color: #aaa; }
-    .cursor-status-dot {
-      width: 5px; height: 5px; border-radius: 50%; background: var(--accent);
-      animation: pulse-dot 1.2s ease infinite; flex-shrink: 0;
-    }
-    .think-chevron {
-      margin-left: auto; font-size: .55rem; opacity: .45; flex-shrink: 0;
-    }
+    .cursor-tool.open .cursor-tool-detail { display: block; }
+    .cursor-tool-icon, .cursor-tool-tag { display: none; }
+    .tool-stack .tool-chevron,
+    .tool-stack .tool-detail,
+    .tool-stack .inline-run { display: none !important; }
+    .cursor-status { display: none; }
     .think-stream {
-      font-size: .72rem; line-height: 1.58; color: #858585;
-      margin: 0 0 .4rem .75rem; padding: 0 0 .15rem .55rem;
-      border-left: 1px solid rgba(255,255,255,.1);
-      max-height: 0; overflow: hidden; opacity: 0;
-      transition: max-height .22s ease, opacity .18s ease, margin .18s ease;
+      font-size: .76rem; line-height: 1.55; color: #858585;
+      margin: .1rem 0 .15rem;
+      padding: 0;
+      border: none; background: transparent;
+      max-height: min(260px, 34vh); overflow-y: auto;
       white-space: pre-wrap; word-break: break-word;
-    }
-    .think-stream.open {
-      max-height: min(240px, 32vh); overflow-y: auto; opacity: 1;
-      margin-bottom: .45rem;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
     .think-stream.done { color: #6e6e6e; }
-    .tool-stack.finished .cursor-status-dot { background: var(--ok); animation: none; }
-    .tool-stack.finished .cursor-status { cursor: default; }
-    .finished-line {
-      font-size: .74rem; color: var(--muted); margin: .25rem 0 .35rem;
-      padding-left: .15rem;
+    /* Flat timeline Thinking rows (Cursor Auto style) */
+    .rail-think {
+      display: flex; flex-direction: column; gap: .05rem;
+      padding: .08rem 0;
+      animation: juno-step-in .18s ease;
     }
-    .explored-line {
-      font-size: .72rem; color: var(--muted); margin-bottom: .35rem;
+    .rail-think-head {
+      display: flex; align-items: center; gap: .35rem;
+      background: none; border: none; padding: 0;
+      font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+      font-size: .78rem; color: #858585; cursor: pointer; text-align: left;
     }
+    .rail-think-head:hover { color: #cccccc; }
+    .rail-think.active .rail-think-head { color: #cccccc; }
+    .rail-think.error .rail-think-head { color: #f48771; }
+    .rail-think-chevron { font-size: .62rem; color: #6e6e6e; width: .7rem; }
+    .rail-think-body {
+      display: none;
+      padding: .15rem 0 .2rem 1rem;
+      font-size: .76rem; line-height: 1.5; color: #858585;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .rail-think.open .rail-think-body { display: block; }
+    .rail-thought-summary {
+      font-size: .82rem; font-weight: 500; color: #9a9a9a;
+      padding: .15rem 0 .25rem; cursor: pointer;
+    }
+    .rail-thought-summary:hover { color: #e8e8e8; }
+    .finished-line, .explored-line, .rail-head, .rail-timeline { display: none !important; }
+    .rail-steps { display: flex; flex-direction: column; gap: .1rem; }
     .attach-bar { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .45rem; min-height: 0; }
     .attach-chip {
       display: inline-flex; align-items: center; gap: .35rem;
@@ -547,9 +1327,29 @@
     .msg.user .bubble { display: none; }
     .msg.assistant .bubble {
       background: transparent; border: none; padding: 0; box-shadow: none;
+      color: #e8edf4;
+    }
+    .msg.assistant .bubble.rich,
+    .msg.assistant .bubble.streaming-live .stream-line {
+      font-size: .9rem; line-height: 1.72;
     }
     .bubble.streaming {
-      box-shadow: 0 4px 24px rgba(34,211,238,.05);
+      box-shadow: none;
+    }
+    .bubble.streaming-live {
+      position: relative;
+      padding-left: .55rem;
+    }
+    .bubble.streaming-live::before {
+      content: '';
+      position: absolute; left: 0; top: .15rem; bottom: .15rem; width: 2px;
+      border-radius: 2px;
+      background: linear-gradient(180deg, rgba(217,119,87,.15), rgba(155,107,255,.55), rgba(78,201,176,.35));
+      animation: stream-edge 1.8s ease-in-out infinite;
+    }
+    @keyframes stream-edge {
+      0%, 100% { opacity: .45; transform: scaleY(.92); }
+      50% { opacity: 1; transform: scaleY(1); }
     }
     .bubble.streaming-live .stream-line {
       color: #e8edf4;
@@ -583,6 +1383,35 @@
       font-size: .78rem; color: var(--muted); margin-top: .35rem;
       display: none; align-items: center; gap: .4rem;
     }
+    .composer-box.is-ended {
+      opacity: .72;
+      border-color: rgba(255, 120, 100, .28);
+    }
+    .session-ended-banner {
+      display: none;
+      margin: 0 0 .5rem;
+      padding: .55rem .75rem;
+      border-radius: 8px;
+      background: rgba(255, 100, 80, .1);
+      border: 1px solid rgba(255, 120, 100, .28);
+      color: #e8c4be;
+      font-size: .82rem;
+      line-height: 1.4;
+    }
+    .session-ended-banner.show { display: block; }
+    .session-ended-banner button {
+      margin-left: .4rem;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,.22);
+      color: #f0d8d4;
+      border-radius: 6px;
+      padding: .15rem .45rem;
+      cursor: pointer;
+      font: inherit;
+      font-size: .78rem;
+    }
+    .session-ended-banner button:hover { background: rgba(255,255,255,.06); }
+
     .think-placeholder {
       color: var(--muted); font-size: .88rem; margin: 0;
       animation: think-pulse 1.6s ease-in-out infinite;
@@ -682,7 +1511,22 @@
     .mode-opt.active .mode-check { opacity: 1; }
     .composer-toolbar #mode-label { display: none; }
     .mode-picker-btn { padding: .2rem .3rem !important; }
-    .composer-footer { display: none; }
+    .composer-footer {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: .5rem; margin-top: .3rem; padding: 0 .1rem;
+      font-size: .68rem; color: var(--muted); line-height: 1.4;
+    }
+    .composer-footer-left { flex: 1; min-width: 0; }
+    .composer-footer-left:empty { display: none; }
+    .composer-footer-right {
+      flex-shrink: 0; opacity: .72; white-space: nowrap;
+      font-size: .64rem;
+    }
+    .composer-box.is-sending { border-color: rgba(78,201,176,.22); }
+    .composer-box.is-sending #input { opacity: .72; }
+    @media (max-width: 720px) {
+      .composer-footer-right { display: none; }
+    }
     .composer-actions { display: flex; gap: .35rem; align-items: center; }
     .btn-icon {
       width: 32px; height: 32px; border-radius: 8px; border: none;
@@ -893,6 +1737,22 @@
       font: inherit; font-size: .75rem; cursor: pointer;
     }
     .btn-focus:hover, .btn-focus.active { color: var(--text); background: rgba(55,148,255,.12); }
+    .juno-viz {
+      margin: .75rem 0;
+      padding: .85rem 1rem;
+      background: rgba(0,0,0,.28);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      overflow-x: auto;
+    }
+    .juno-viz.juno-mermaid svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+    .juno-chart-wrap { min-height: 220px; }
+    .juno-chart-wrap canvas { max-width: 100%; max-height: 360px; }
+    .juno-viz-err {
+      color: #f48771; font-size: 12px; margin-top: .4rem;
+      font-family: "JetBrains Mono", monospace; white-space: pre-wrap;
+    }
+
     .friendly-list {
       margin: .4rem 0 .5rem;
       padding-left: 1.15rem;
@@ -944,7 +1804,9 @@
 
   <div class="app cursor-v3" id="app-root">
     <nav class="icon-rail" aria-label="导航">
-      <button type="button" class="rail-brand" id="btn-rail-home" title="Juno 首页">J</button>
+      <button type="button" class="rail-brand" id="btn-rail-home" title="Juno 首页">
+        <img src="/assets/juno-spirit.png" alt="" width="32" height="32" onerror="this.onerror=null;this.src='/assets/juno-spirit.svg';" />
+      </button>
       <button type="button" class="rail-btn" id="btn-rail-history" title="历史对话">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
         <span class="rail-label">历史</span>
@@ -1031,9 +1893,15 @@
 
       <div class="messages-wrap" id="messages-scroll">
         <div class="messages" id="messages" aria-live="polite">
-          <div class="welcome" id="welcome">
+          <div class="welcome welcome-hero" id="welcome">
+            <div class="juno-sprite-wrap lg" data-state="idle"></div>
             <h3>你好</h3>
-            <p>我是 Juno。Agent 可读代码，Ask 只读，Chat 纯对话。底部 ∞ 切换模式。</p>
+            <p class="welcome-tagline">我是 Juno<br>点玻璃球可以看思考过程</p>
+            <div class="welcome-chips">
+              <button type="button" class="welcome-chip" data-q="介绍一下你自己">👋 认识 Juno</button>
+              <button type="button" class="welcome-chip" data-q="今天有什么可以帮我的？">💡 今天帮什么</button>
+              <button type="button" class="welcome-chip" data-q="帮我看看当前项目结构">📁 看项目</button>
+            </div>
           </div>
         </div>
         <button class="scroll-fab" id="scroll-fab">↓ 回到底部</button>
@@ -1048,24 +1916,28 @@
       <div class="composer-inner">
         <div class="composer-context">
           <div class="review-bar" id="review-bar">
-            <div class="review-bar-files"><span class="review-bar-chevron">›</span> <span class="review-bar-count" id="review-files-count">0 Files</span></div>
+            <div class="review-bar-files"><span class="review-bar-chevron">›</span> <span class="review-bar-count" id="review-files-count">0 个文件</span></div>
             <div class="review-bar-actions">
-              <button type="button" class="review-btn" id="review-btn-undo">Undo All</button>
-              <button type="button" class="review-btn" id="review-btn-keep">Keep All</button>
-              <button type="button" class="review-btn primary" id="review-btn-review">Review</button>
+              <button type="button" class="review-btn" id="review-btn-undo">全部撤销</button>
+              <button type="button" class="review-btn" id="review-btn-keep">全部保留</button>
+              <button type="button" class="review-btn primary" id="review-btn-review">审查</button>
             </div>
           </div>
           <div class="todo-inline" id="todo-inline"></div>
           <div class="open-files-bar" id="open-files-bar"></div>
           <div class="context-chips" id="context-chips"></div>
           <div class="attach-bar" id="attach-bar"></div>
+          <div class="session-ended-banner" id="session-ended-banner">
+            本会话已结束（长期空骂、划界无效）。
+            <button type="button" id="btn-ended-new">开新对话</button>
+          </div>
         </div>
-        <div class="composer-box">
+        <div class="composer-box" id="composer-box">
           <div class="mention-menu" id="mention-menu"></div>
           <div class="slash-menu" id="slash-menu"></div>
           <div class="composer-input-row">
             <div class="composer-pills" id="composer-pills"></div>
-            <textarea id="input" rows="1" placeholder="Plan, @ for context, / for commands · 拖入文件/文件夹"></textarea>
+            <textarea id="input" rows="1" placeholder="描述任务，@ 引用文件，/ 输入命令，可拖入文件"></textarea>
           </div>
           <div class="composer-toolbar">
             <div class="mode-picker-wrap">
@@ -1104,10 +1976,10 @@
             </button>
           </div>
         </div>
-        <div class="composer-footer" aria-hidden="true">
+        <div class="composer-footer">
           <span class="composer-footer-left" id="mode-hint"></span>
           <span class="composer-footer-left" id="run-status" style="display:none"></span>
-          <span class="composer-footer-left" id="mode-active-hint"></span>
+          <span class="composer-footer-right" id="composer-shortcuts">Enter 发送 · Shift+Enter 换行 · Esc 关闭</span>
         </div>
       </div>
     </div>
@@ -1118,11 +1990,11 @@
     <div class="hist-top">
       <div class="hist-search-wrap">
         <svg class="hist-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
-        <input type="search" class="hist-search" id="hist-search" placeholder="Search Agents…" autocomplete="off" />
+        <input type="search" class="hist-search" id="hist-search" placeholder="搜索对话…" autocomplete="off" />
       </div>
       <button type="button" class="hist-new-btn" id="btn-new" title="新对话">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-        New Agent
+        新对话
       </button>
     </div>
     <div class="sessions" id="sessions"></div>
@@ -1135,7 +2007,7 @@
   <!-- Cursor cookbook agent-kanban style: parallel agents drawer -->
   <div class="agents-drawer" id="agents-drawer">
     <div class="agents-drawer-head">
-      <h3>Agents</h3>
+      <h3>子代理</h3>
       <button type="button" class="agents-drawer-close" id="agents-drawer-close" title="关闭">×</button>
     </div>
     <div class="agents-tabs" id="agents-tabs"></div>
@@ -1145,7 +2017,7 @@
   <div class="review-drawer" id="review-drawer">
     <div class="review-drawer-panel review-split">
       <div class="review-drawer-head">
-        <h3>Review changes</h3>
+      <h3>审查变更</h3>
         <button type="button" class="review-drawer-close" id="review-drawer-close">×</button>
       </div>
       <div class="review-drawer-split">
@@ -1263,6 +2135,7 @@
     const $$ = s => document.querySelectorAll(s);
     let sessionId = null, sending = false, sendWatchdog = null, stickToBottom = true;
     let abortCtrl = null;
+    let sessionEnded = false;
     let chatMode = localStorage.getItem('juno-mode') || 'agent';
     let agentMode = chatMode !== 'chat';
     let askMode = chatMode === 'ask';
@@ -1270,11 +2143,46 @@
     let pendingAttachments = [];
 
     const MODE_META = {
-      agent: { icon: '∞', label: 'Agent', hint: '∞ Agent · Auto · read/grep/glob/str_replace' },
-      plan:  { icon: '◈', label: 'Plan', hint: '◈ Plan · 只规划 · 不执行写操作' },
-      ask:   { icon: '👁', label: 'Ask', hint: '👁 Ask · 只读 · search/read/grep' },
-      chat:  { icon: '○', label: 'Chat', hint: '○ Chat · 纯对话 · 无工具' },
+      agent: {
+        icon: '∞', label: 'Agent',
+        hint: 'Agent · 读写/Shell/图表（mermaid·chart）',
+        placeholder: '描述任务，@ 引用文件，/ 输入命令，可拖入文件',
+      },
+      plan: {
+        icon: '◈', label: 'Plan',
+        hint: 'Plan · 只出计划，不修改文件',
+        placeholder: '描述目标，我会给出步骤计划（不会直接改文件）',
+      },
+      ask: {
+        icon: '👁', label: 'Ask',
+        hint: 'Ask · 只读探索，不会改文件',
+        placeholder: '问代码、查项目、定位问题（只读模式）',
+      },
+      chat: {
+        icon: '○', label: 'Chat',
+        hint: 'Chat · 纯对话，不调用工具',
+        placeholder: '随便聊…（不读写文件、不跑命令）',
+      },
     };
+
+    function setRunStatus(on) {
+      const rs = $('#run-status');
+      if (!rs) return;
+      if (on) {
+        rs.textContent = '生成中… · Esc 停止';
+        rs.style.display = '';
+      } else {
+        rs.textContent = '';
+        rs.style.display = 'none';
+      }
+      updateScrollFab();
+    }
+
+    function updateScrollFab() {
+      const fab = $('#scroll-fab');
+      if (!fab) return;
+      fab.textContent = sending ? '↓ 新回复' : '↓ 回到底部';
+    }
 
     function applyChatMode(mode, opts = {}) {
       chatMode = mode;
@@ -1294,164 +2202,426 @@
     function syncModeUI() {
       const meta = MODE_META[chatMode] || MODE_META.agent;
       const iconEl = $('#mode-icon'), labelEl = $('#mode-label'), hintEl = $('#mode-hint');
+      const inputEl = $('#input');
       if (iconEl) iconEl.textContent = meta.icon;
       if (labelEl) labelEl.textContent = meta.label;
       if (hintEl) hintEl.textContent = meta.hint;
+      if (inputEl && !sending && !inputEl.value.trim()) inputEl.placeholder = meta.placeholder;
       document.querySelectorAll('.mode-opt').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.mode === chatMode);
       });
       syncCapPills();
-      const activeHint = $('#mode-active-hint');
-      if (activeHint) activeHint.textContent = '';
     }
 
     class AgentRail {
       constructor(msgBody) {
         this.toolCount = 0;
-        this.thinkRaw = '';
-        this.thinkOpen = true;
-        this.stack = document.createElement('div');
-        this.stack.className = 'tool-stack';
-        this.statusEl = document.createElement('div');
-        this.statusEl.className = 'cursor-status';
-        this.statusEl.innerHTML = '<span class="cursor-status-dot"></span><span class="cursor-status-text">Planning next moves</span><span class="think-chevron">▾</span>';
-        this.statusEl.addEventListener('click', () => {
-          if (this.stack.classList.contains('finished') && !this.thinkRaw.trim()) return;
-          this.thinkOpen = !this.thinkOpen;
-          this._syncThinkOpen();
-        });
-        this.stack.appendChild(this.statusEl);
-        this.thinkEl = document.createElement('div');
-        this.thinkEl.className = 'think-stream open';
-        this.stack.appendChild(this.thinkEl);
-        this.exploredEl = document.createElement('div');
-        this.exploredEl.className = 'explored-line';
-        this.exploredEl.style.display = 'none';
-        this.stack.appendChild(this.exploredEl);
-        this.finishedEl = document.createElement('div');
-        this.finishedEl.className = 'finished-line';
-        this.finishedEl.style.display = 'none';
-        const bubble = msgBody.querySelector('.bubble');
-        msgBody.insertBefore(this.finishedEl, bubble);
-        msgBody.insertBefore(this.stack, bubble);
         this.stepIdx = 0;
-        this.statusText = this.statusEl.querySelector('.cursor-status-text');
-        this.chevronEl = this.statusEl.querySelector('.think-chevron');
-        this.lastLabel = '';
+        this.thinkIds = new Set();
+        this.activeThinkId = null;
+        this.thoughtLabel = '';
+        this.elapsedSec = 0;
+        this.startedAt = Date.now();
+        this.lightTurn = false;
+        this._toolIds = new Set();
+
+        // Single Exploring container — flat interleaved timeline inside
+        this.stack = document.createElement('div');
+        this.stack.className = 'tool-stack live';
+
+        this.summaryEl = document.createElement('div');
+        this.summaryEl.className = 'rail-thought-summary';
+        this.summaryEl.style.display = 'none';
+        this.summaryEl.title = '点击展开/收起步骤';
+        this.stack.appendChild(this.summaryEl);
+
+        this.sec = document.createElement('div');
+        this.sec.className = 'rail-sec pending collapsed';
+        this.sec.dataset.sec = 'exploring';
+        this.sec.innerHTML = `
+          <button type="button" class="rail-sec-head">
+            <span class="sec-chevron">▸</span>
+            <span class="sec-title">Exploring</span>
+          </button>
+          <div class="sec-body"></div>`;
+        this.chevron = this.sec.querySelector('.sec-chevron');
+        this.titleEl = this.sec.querySelector('.sec-title');
+        this.body = this.sec.querySelector('.sec-body');
+        this.sec.querySelector('.rail-sec-head').addEventListener('click', (e) => {
+          e.preventDefault();
+          this.sec.classList.toggle('collapsed');
+          const collapsed = this.sec.classList.contains('collapsed');
+          this.chevron.textContent = collapsed ? '▸' : '▾';
+        });
+        this.stack.appendChild(this.sec);
+        this.sec.style.display = 'none';
+        this.used = false;
+
+        // compat stubs for old callers
+        this.sections = {
+          exploring: { el: this.sec, body: this.body, chevron: this.chevron, used: false },
+          thinking: { el: this.sec, body: this.body, chevron: this.chevron, used: false },
+          running: { el: this.sec, body: this.body, chevron: this.chevron, used: false },
+          editing: { el: this.sec, body: this.body, chevron: this.chevron, used: false },
+          answering: { el: this.sec, body: this.body, chevron: this.chevron, used: false },
+        };
+        this.secOrder = ['exploring'];
+        this.statusText = { textContent: '' };
+        this.exploredEl = { style: {}, textContent: '' };
+        this.thinkEl = null;
+        this.thinkRaw = '';
+        this.finishedEl = document.createElement('div');
+        this.finishedEl.style.display = 'none';
+
+        const msgContent = msgBody.querySelector('.msg-content') || msgBody;
+        const bubble = msgContent.querySelector('.bubble');
+        if (!bubble) throw new Error('bubble missing');
+        msgContent.insertBefore(this.finishedEl, bubble);
+        msgContent.insertBefore(this.stack, bubble);
+
+        this.spriteWrap = msgBody.querySelector('.juno-sprite-wrap');
+        this._bindSprite();
+        this._setSprite('thinking', 'Thinking…');
+        this.spriteWrap?.classList.add('juno-session-active');
       }
-      _syncThinkOpen() {
-        if (!this.thinkEl) return;
-        const has = !!this.thinkRaw.trim();
-        this.thinkEl.classList.toggle('open', this.thinkOpen && has);
-        if (this.chevronEl) {
-          this.chevronEl.style.visibility = has ? 'visible' : 'hidden';
-          this.chevronEl.textContent = this.thinkOpen ? '▾' : '▸';
+      _bindSprite() {
+        const btn = this.spriteWrap?.querySelector('.juno-sprite');
+        if (!btn) return;
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.stack.classList.toggle('expanded');
+          this.stack.classList.toggle('peek-open');
+          this.spriteWrap?.classList.toggle('peek-open');
+          if (this.stack.classList.contains('peek-open') && this.used) {
+            this.sec.classList.remove('collapsed');
+            this.chevron.textContent = '▾';
+          }
+        });
+      }
+      _setSprite(state, speech) {
+        setSpriteState(this.spriteWrap, state, speech);
+      }
+      _ensureOpen() {
+        this.used = true;
+        this.sections.exploring.used = true;
+        this.sec.style.display = '';
+        this.sec.classList.remove('pending', 'collapsed');
+        this.sec.classList.add('active');
+        this.chevron.textContent = '▾';
+      }
+      _upsertTool(id, label, state, detail) {
+        this._ensureOpen();
+        let el = this.body.querySelector(`[data-tool-id="${CSS.escape(id)}"]`);
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'cursor-tool';
+          el.dataset.toolId = id;
+          el.innerHTML = `
+            <button type="button" class="cursor-tool-head">
+              <span class="cursor-tool-chevron">▸</span>
+              <span class="cursor-tool-label"></span>
+            </button>
+            <div class="cursor-tool-detail"></div>`;
+          el.querySelector('.cursor-tool-head').addEventListener('click', (e) => {
+            e.preventDefault();
+            const d = el.querySelector('.cursor-tool-detail');
+            // Always toggle — show placeholder if no detail yet
+            if (d && !d.textContent.trim()) d.textContent = '(no details)';
+            el.classList.toggle('open');
+            el.querySelector('.cursor-tool-chevron').textContent =
+              el.classList.contains('open') ? '▾' : '▸';
+          });
+          this.body.appendChild(el);
         }
-      }
-      _renderThink() {
-        const text = toLiveText(this.thinkRaw);
-        if (!this.thinkEl) return;
-        if (!text.trim()) {
-          this.thinkEl.textContent = '';
-          this._syncThinkOpen();
-          return;
+        el.className = 'cursor-tool ' + state + (el.classList.contains('open') ? ' open' : '');
+        el.querySelector('.cursor-tool-label').textContent = label;
+        if (detail) {
+          const d = el.querySelector('.cursor-tool-detail');
+          d.textContent = detail;
+          // Show chevron affordance when details exist
+          el.querySelector('.cursor-tool-chevron').style.visibility = 'visible';
         }
-        this.thinkEl.textContent = text;
-        this.thinkEl.scrollTop = this.thinkEl.scrollHeight;
-        this._syncThinkOpen();
+        return el;
       }
-      _toolIcon(label) {
-        const l = (label || '').toLowerCase();
-        if (/read|grep|glob|list|explor/.test(l)) return '◆';
-        if (/search|index/.test(l)) return '⌕';
-        if (/git|shell|run|python/.test(l)) return '▸';
-        if (/wrote|edit|patch|str/.test(l)) return '✎';
-        return '◆';
-      }
-      _toolTag(label) {
-        const l = (label || '').toLowerCase();
-        if (/read/.test(l)) return 'read';
-        if (/grep/.test(l)) return 'grep';
-        if (/glob|explor/.test(l)) return 'glob';
-        if (/search|index/.test(l)) return 'search';
-        if (/git/.test(l)) return 'git';
-        if (/python|shell|run/.test(l)) return 'py';
-        return 'tool';
-      }
-      _updateExplored() {
-        if (this.toolCount > 0) {
-          this.exploredEl.style.display = 'block';
-          this.exploredEl.textContent = `Explored ${this.toolCount} step${this.toolCount > 1 ? 's' : ''}`;
+      _toolDetail(event) {
+        const parts = [];
+        const name = (event.name || '').toLowerCase();
+        const args = event.args || {};
+        if (name === 'web_fetch' && args.url) parts.push(String(args.url));
+        if (name === 'web_search' && args.query) parts.push('query: ' + String(args.query));
+        if (name === 'read_file' && args.path) {
+          parts.push(String(args.path) + (args.offset ? ` · L${args.offset}` : ''));
         }
+        if (name === 'grep' && args.pattern) parts.push('pattern: ' + String(args.pattern));
+        if (name === 'run_shell' && args.command) parts.push(String(args.command));
+        if (event.result?.error) parts.push('error: ' + String(event.result.error).slice(0, 240));
+        if (event.ok === false && event.result?.hint) parts.push(String(event.result.hint).slice(0, 160));
+        if (event.result?.abstract) parts.push(String(event.result.abstract).slice(0, 200));
+        if (Array.isArray(event.result?.results) && event.result.results.length) {
+          const tops = event.result.results.slice(0, 3).map((r) => {
+            const t = (r.title || r.url || '').slice(0, 60);
+            return '• ' + t;
+          });
+          parts.push(tops.join('\n'));
+        }
+        if (!parts.length && event.label && event.label.length > 42) parts.push(event.label);
+        return parts.join('\n');
+      }
+      _speechFromLabel(label, name) {
+        const n = String(name || '').toLowerCase();
+        const l = String(label || '').toLowerCase();
+        if (n === 'web_search' || /search|searched|grep|glob|list|explor|read /.test(l)) return 'Exploring…';
+        if (n === 'web_fetch' || /fetch/.test(l)) return 'Fetching…';
+        if (/shell|ran |git/.test(n + ' ' + l)) return 'Running…';
+        if (/edit|wrote|patch|write/.test(n + ' ' + l)) return 'Editing…';
+        if (/think/.test(n + ' ' + l)) return 'Thinking…';
+        return 'Working…';
+      }
+      _upsertThink(id, text, phase, state) {
+        this._ensureOpen();
+        const clean = String(text || '').replace(/\uFFFD/g, '');
+        let el = this.body.querySelector(`[data-think-id="${CSS.escape(id)}"]`);
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'rail-think';
+          el.dataset.thinkId = id;
+          el.innerHTML = `
+            <button type="button" class="rail-think-head">
+              <span class="rail-think-chevron">▸</span>
+              <span class="rail-think-label">Thinking</span>
+            </button>
+            <div class="rail-think-body"></div>`;
+          el.querySelector('.rail-think-head').addEventListener('click', (e) => {
+            e.preventDefault();
+            el.classList.toggle('open');
+            const open = el.classList.contains('open');
+            el.querySelector('.rail-think-chevron').textContent = open ? '▾' : '▸';
+          });
+          this.body.appendChild(el);
+          this.thinkIds.add(id);
+        }
+        el.classList.toggle('active', state === 'active');
+        el.classList.toggle('error', state === 'error');
+        const body = el.querySelector('.rail-think-body');
+        if (phase === 'delta' && clean) {
+          body.textContent = ((body.textContent || '') + clean).replace(/\uFFFD/g, '');
+          el.classList.add('open');
+          el.querySelector('.rail-think-chevron').textContent = '▾';
+        } else if (clean) {
+          body.textContent = clean;
+          if (phase === 'done') {
+            el.classList.remove('open');
+            el.querySelector('.rail-think-chevron').textContent = '▸';
+          }
+        }
+        this.activeThinkId = id;
+        this.thinkRaw = body.textContent || this.thinkRaw;
+        return el;
       }
       push(event) {
         const state = event.state || 'done';
-        if (event.type === 'thinking_delta' && event.text) {
-          this.thinkRaw += event.text;
-          if (this.statusText && !this.stack.classList.contains('finished')) {
-            this.statusText.textContent = 'Planning next moves';
-          }
-          this._renderThink();
+        if (event.type === 'thinking' || (event.type === 'thinking_delta' && event.text)) {
+          const id = event.id || this.activeThinkId || (`think-${++this.stepIdx}`);
+          const text = event.text || '';
+          const phase = event.phase || (event.type === 'thinking_delta' ? 'delta' : 'done');
+          this._upsertThink(id, text, phase, state === 'error' ? 'error' : (phase === 'done' ? 'done' : 'active'));
+          this._setSprite('thinking', 'Thinking…');
           scrollMessages();
           return;
         }
         if (event.type === 'subagent') {
-          this.finishedEl.style.display = 'flex';
-          this.finishedEl.innerHTML = `<span class="fin-check">✓</span><span>${esc(event.label || 'Finished subagent')}</span>`;
+          this._upsertTool(event.id || ('sub-' + (++this.stepIdx)), event.label || 'Subagent', state === 'active' ? 'active' : 'done');
           window.JunoCursorUI?.onSubagent(event);
           scrollMessages();
           return;
         }
         if (event.type === 'plan') {
-          this.statusText.textContent = event.label || 'Planning next moves';
-          if (state === 'done') this.statusText.textContent = 'Generating answer';
-          this.lastLabel = event.label || this.lastLabel;
+          const label = event.label || '';
+          if (/Thought for/i.test(label) || event.elapsed_ms) {
+            const sec = event.elapsed_ms != null
+              ? Math.max(1, Math.round(Number(event.elapsed_ms) / 1000))
+              : (parseInt(String(label).replace(/\D/g, ''), 10) || 1);
+            this.elapsedSec = sec;
+            this.thoughtLabel = `Thought for ${sec}s`;
+            this.summaryEl.textContent = this.thoughtLabel;
+            this.summaryEl.style.display = '';
+            scrollMessages();
+            return;
+          }
+          if (/Planning next|generat|answer|组织|回答/i.test(label)) {
+            if (/Planning next/i.test(label)) {
+              this._upsertTool('plan-next', 'Planning next moves', 'done');
+            }
+            this._setSprite('streaming', 'Generating…');
+          } else if (/Exploring|Thinking/i.test(label)) {
+            this._ensureOpen();
+            // Visible transition row — empty Exploring alone looked like a blank bubble
+            if (/Think/i.test(label)) {
+              this._upsertThink(event.id || 'plan-thinking', '正在组织思路…', 'start', 'active');
+            }
+            this._setSprite(/Think/i.test(label) ? 'thinking' : 'planning', label + '…');
+          }
           scrollMessages();
           return;
         }
-        if (event.type === 'tool' || event.type === 'prefetch') {
-          this.toolCount++;
-          this._updateExplored();
+        if (event.type === 'chain' || event.type === 'prefetch') {
+          // Ignore phased scripts / fake prefetch rows — flat timeline only
+          scrollMessages();
+          return;
         }
-        const id = event.id || `${event.type}-${++this.stepIdx}`;
-        let el = this.stack.querySelector(`[data-tool-id="${CSS.escape(id)}"]`);
-        if (!el) {
-          el = document.createElement('div');
-          el.className = 'cursor-tool';
-          el.dataset.toolId = id;
-          el.innerHTML = `<span class="cursor-tool-icon"></span><span class="cursor-tool-label"></span><span class="cursor-tool-tag"></span>`;
-          this.stack.appendChild(el);
-        }
-        el.className = 'cursor-tool ' + state;
-        const label = event.label || event.name || event.type || '…';
-        this.lastLabel = label;
-        el.querySelector('.cursor-tool-icon').textContent = state === 'error' ? '✗' : state === 'active' ? '◐' : this._toolIcon(label);
-        el.querySelector('.cursor-tool-label').textContent = label;
-        const tag = this._toolTag(label);
-        const tagEl = el.querySelector('.cursor-tool-tag');
-        tagEl.textContent = tag;
-        if (event.phase === 'done' && window.JunoCursorUI) {
-          window.JunoCursorUI.enhanceToolEl(el, event);
-          if (event.name === 'run_shell' || event.result?.command) {
-            window.JunoCursorUI.terminal?.pushFromTool(event);
+        if (event.type === 'tool') {
+          const name = (event.name || '').toLowerCase();
+          // think should arrive as type=thinking; if it slips through as tool, map it
+          if (name === 'think') {
+            const thought = event.args?.thought || event.label || '';
+            this._upsertThink(event.id || (`think-${++this.stepIdx}`), thought, event.phase || 'done', state);
+            this._setSprite('thinking', 'Thinking…');
+            scrollMessages();
+            return;
           }
+          const label = event.label || event.name || 'tool';
+          const tid = event.id || (`tool-${++this.stepIdx}`);
+          if (!this._toolIds.has(tid)) {
+            this._toolIds.add(tid);
+            this.toolCount++;
+          }
+          const detail = this._toolDetail(event);
+          this._upsertTool(tid, label, state, detail);
+          this._setSprite('tool', this._speechFromLabel(label, name));
+          if (event.phase === 'done' && (name === 'run_shell' || event.result?.command)) {
+            window.JunoCursorUI?.terminal?.pushFromTool(event);
+          }
+          scrollMessages();
+          return;
         }
-        scrollMessages();
       }
       finish() {
+        this.stack.classList.remove('live');
         this.stack.classList.add('finished');
-        if (this.thinkRaw.trim()) {
-          this.statusText.textContent = 'Thought';
-          this.thinkOpen = false;
-          this.thinkEl.classList.add('done');
-          this._syncThinkOpen();
-        } else {
-          this.statusEl.style.display = 'none';
+        this.stack.classList.remove('expanded', 'peek-open');
+        this.spriteWrap?.classList.remove('peek-open');
+        if (!this.elapsedSec) {
+          this.elapsedSec = Math.max(1, Math.round((Date.now() - (this.startedAt || Date.now())) / 1000));
         }
-        const short = (this.lastLabel || 'task').slice(0, 48);
-        this.finishedEl.style.display = 'flex';
-        this.finishedEl.innerHTML = `<span class="fin-check">✓</span><span>Finished ${esc(short)}${this.lastLabel && this.lastLabel.length > 48 ? '…' : ''}</span>`;
+        if (!this.thoughtLabel) this.thoughtLabel = `Thought for ${this.elapsedSec}s`;
+        this.summaryEl.textContent = this.thoughtLabel;
+        this.summaryEl.style.display = '';
+        // Click Thought for Ns → peek open Exploring (Cursor: re-inspect chain)
+        this.summaryEl.onclick = () => {
+          if (!this.used) return;
+          this.sec.classList.toggle('collapsed');
+          const collapsed = this.sec.classList.contains('collapsed');
+          this.chevron.textContent = collapsed ? '▸' : '▾';
+          this.sec.style.display = '';
+        };
+
+        const rows = this.body.querySelectorAll('.cursor-tool, .rail-think').length;
+        if (!rows && !this.thinkIds.size) {
+          this.sec.style.display = 'none';
+        } else {
+          this.sec.style.display = '';
+          this.sec.classList.remove('active', 'pending');
+          this.sec.classList.add('done', 'collapsed');
+          this.chevron.textContent = '▸';
+          const n = this.body.querySelectorAll('.cursor-tool').length + this.body.querySelectorAll('.rail-think').length;
+          this.titleEl.textContent = `Exploring · ${n}`;
+          this.body.querySelectorAll('.rail-think').forEach((el) => {
+            el.classList.remove('open', 'active');
+            const ch = el.querySelector('.rail-think-chevron');
+            if (ch) ch.textContent = '▸';
+          });
+          this.body.querySelectorAll('.cursor-tool').forEach((el) => {
+            el.classList.remove('open', 'active');
+            const ch = el.querySelector('.cursor-tool-chevron');
+            if (ch) ch.textContent = '▸';
+          });
+        }
+        settleSpriteAfterReply(this.spriteWrap, { instant: true });
       }
+    }
+
+    function settleSpriteAfterReply(wrap, opts = {}) {
+      if (!wrap) return;
+      // Cancel stale mood rotations / pending opacity writes
+      if (moodRotateTimer) { clearInterval(moodRotateTimer); moodRotateTimer = null; }
+      const gen = (Number(wrap.dataset.moodGen) || 0) + 1;
+      wrap.dataset.moodGen = String(gen);
+
+      const praise = wrap.dataset.praiseIntent || pendingPraiseIntent || '';
+      const smileAfter = praise === 'now' || praise === 'after';
+      if (smileAfter) {
+        setOrbExpr(wrap, 'smile', opts.smileHoldMs || 7000);
+        delete wrap.dataset.praiseIntent;
+        pendingPraiseIntent = null;
+      }
+
+      if (wrap.closest('#welcome')) {
+        forceSpriteIdle(wrap);
+        if (smileAfter) setOrbExpr(wrap, 'smile', opts.smileHoldMs || 7000);
+        startIdleCompanion();
+        return;
+      }
+      const brief = !!opts.brief;
+      const instant = !!opts.instant;
+      wrap.classList.remove('reply-settled');
+      if (instant) {
+        forceSpriteIdle(wrap);
+        if (smileAfter) setOrbExpr(wrap, 'smile', opts.smileHoldMs || 7000);
+        wrap.classList.add('reply-settled');
+        wrap.closest('.msg-row')?.classList.remove('streaming-turn');
+        return;
+      }
+      setSpriteState(wrap, 'done', '');
+      setTimeout(() => {
+        if (String(wrap.dataset.moodGen) !== String(gen)) return;
+        forceSpriteIdle(wrap);
+        if (smileAfter) setOrbExpr(wrap, 'smile', opts.smileHoldMs || 7000);
+        wrap.classList.add('reply-settled');
+        wrap.closest('.msg-row')?.classList.remove('streaming-turn');
+      }, brief ? 450 : 900);
+    }
+
+    function forceSpriteIdle(wrap) {
+      if (!wrap) return;
+      if (moodRotateTimer) { clearInterval(moodRotateTimer); moodRotateTimer = null; }
+      wrap.dataset.state = 'idle';
+      wrap.classList.remove('juno-session-active', 'peek-open');
+      wrap.closest('.msg-row')?.classList.remove('streaming-turn');
+      syncOrbMotion(wrap);
+      const moodEl = wrap.querySelector('.juno-mood');
+      const t = wrap.querySelector('.juno-mood-text');
+      if (t) {
+        t.style.opacity = '1';
+        t.textContent = wrap.classList.contains('lg') ? (pickMood('idle') || '') : '';
+      }
+      moodEl?.classList.remove('busy');
+      moodEl?.classList.toggle('show-idle', wrap.classList.contains('lg') && !!t?.textContent);
+    }
+
+    function activeSpriteWrap() {
+      return document.querySelector('.msg.assistant:last-of-type .juno-sprite-wrap');
+    }
+
+    function setJunoState(state, hint) {
+      const wrap = activeSpriteWrap();
+      if (!wrap) return;
+      if (!state) return;
+      // Never resurrect a settled/idle reply into "正在想"
+      if (wrap.classList.contains('reply-settled') || wrap.dataset.state === 'idle') {
+        if (state === 'thinking' || state === 'planning') return;
+      }
+      if (state === 'streaming') setSpriteState(wrap, 'streaming', hint || 'Generating…');
+      else if (state === 'planning') setSpriteState(wrap, 'planning', hint || 'Exploring…');
+      else if (state === 'thinking') {
+        const st = wrap.dataset.state === 'tool' ? 'tool' : (planMode && wrap.dataset.state === 'planning' ? 'planning' : 'thinking');
+        setSpriteState(wrap, st, hint || '');
+      }
+      wrap.classList.add('juno-session-active');
+    }
+
+    function resetSpriteAfterReply(wrap) {
+      settleSpriteAfterReply(wrap, { instant: true });
     }
 
     let pendingOptimisticPaths = [];
@@ -1711,9 +2881,11 @@
         toast('已附加 · 👁 预览');
       } catch (e) {
         pendingOptimisticPaths = pendingOptimisticPaths.filter(p => p !== pathStr);
+        // Still @ into context so Agent can trust+read this turn — but tell user attach preview failed
         window.__junoAddContextPath?.({ path: pathStr, label: pathStr.split(/[/\\]/).pop() || pathStr, kind: 'folder' });
         renderComposerPills();
-        toast('已 @ ' + pathStr.split(/[/\\]/).pop());
+        const msg = (e && e.message) ? String(e.message) : '附加失败';
+        toast('预览失败，已 @ 路径给 Agent：' + (pathStr.split(/[/\\]/).pop() || pathStr) + (msg.includes('不可访问') ? '（若仍读不到需重启 Juno）' : ''));
       }
     }
 
@@ -1944,6 +3116,296 @@
       });
     }
 
+    const JUNO_SPIRIT = '/assets/juno-spirit.svg';
+    const JUNO_SPIRIT_PNG = '/assets/juno-spirit.png';
+    let pendingPraiseIntent = null;
+    function junoSpiritMarkup() {
+      /* Idle = static poster + soft CSS life; busy = turn video; praise = smile still */
+      return `<div class="juno-orb juno-orb--video" aria-hidden="true">
+        <div class="juno-orb-core">
+          <video class="juno-orb-skin juno-orb-vid" muted playsinline preload="metadata" poster="/assets/juno-orb-idle.png">
+            <source src="/assets/juno-orb-loop.mp4" type="video/mp4" />
+          </video>
+          <img class="juno-orb-skin juno-orb-smile" src="/assets/juno-orb-smile.png" alt="" draggable="false" />
+          <div class="juno-orb-shine"></div>
+          <div class="juno-orb-rim"></div>
+        </div>
+      </div>`;
+    }
+
+    /** Detect praise / compliment (short lines); skip mixed long task asks. */
+    function praiseIntent(text) {
+      const t = String(text || '').trim();
+      if (!t || t.length > 90) return null;
+      const praiseHit = /谢谢你|谢谢|感谢|太棒了|太棒|真棒|棒棒哒|棒棒|好厉害|真厉害|太厉害|厉害了|太强了|太强|牛逼|牛啊|牛批|绝了|满分|干得好|做得好|好可爱|好漂亮|真好看|喜欢你|爱了爱了|爱了|好贴心|贴心|真靠谱|靠谱|好聪明|聪明|你真好|辛苦了|好用|thank\s*you|thanks|good\s*job|well\s*done|amazing|awesome|nice\s*work|love\s*you|great\s*job/i.test(t);
+      if (!praiseHit) return null;
+      const hasTask = /帮我|怎么|如何|为什么|改一|修复|写一|实现|调试|看看这|什么是|能不能帮|请你|帮我把/.test(t);
+      if (hasTask && t.length > 18) return 'after';
+      return 'now';
+    }
+
+    let orbSmileClearTimer = null;
+    function setOrbExpr(wrap, expr, holdMs) {
+      if (!wrap) return;
+      const orb = wrap.querySelector('.juno-orb--video');
+      if (!orb) return;
+      const next = expr === 'smile' ? 'smile' : '';
+      if (next) orb.setAttribute('data-expr', next);
+      else orb.removeAttribute('data-expr');
+      if (orbSmileClearTimer) { clearTimeout(orbSmileClearTimer); orbSmileClearTimer = null; }
+      if (next === 'smile' && holdMs) {
+        const gen = (Number(wrap.dataset.smileGen) || 0) + 1;
+        wrap.dataset.smileGen = String(gen);
+        orbSmileClearTimer = setTimeout(() => {
+          if (String(wrap.dataset.smileGen) !== String(gen)) return;
+          orb.removeAttribute('data-expr');
+        }, holdMs);
+      }
+      syncOrbMotion(wrap);
+    }
+
+    function applyPraiseToOrb(wrap, intent) {
+      if (!wrap || !intent) return;
+      wrap.dataset.praiseIntent = intent;
+      if (intent === 'now') setOrbExpr(wrap, 'smile', 0);
+    }
+
+    /** Idle/done/settled → freeze on front frame; answering → play loop; smile expr stays still */
+    function syncOrbMotion(wrap) {
+      if (!wrap) return;
+      const orb = wrap.querySelector('.juno-orb--video');
+      const vid = wrap.querySelector('video.juno-orb-vid');
+      if (!vid) return;
+      const smiling = orb?.getAttribute('data-expr') === 'smile';
+      const busy = BUSY_STATES.has(wrap.dataset.state || 'idle');
+      if (smiling) {
+        vid.loop = false;
+        vid.pause();
+        try { vid.currentTime = 0; } catch (_) {}
+        return;
+      }
+      if (busy) {
+        vid.loop = true;
+        if (vid.paused) {
+          const play = () => vid.play().catch(() => {});
+          if (vid.readyState >= 2) play();
+          else vid.addEventListener('loadeddata', play, { once: true });
+        }
+      } else {
+        vid.loop = false;
+        vid.pause();
+        try { vid.currentTime = 0; } catch (_) {}
+      }
+    }
+
+    /** Pointer look-follow + idle left/right sway on an orb root (.juno-orb). */
+    function bindOrbLook(orbEl, opts = {}) {
+      if (!orbEl || orbEl.dataset.lookBound) return;
+      if (orbEl.classList.contains('juno-orb--video')) return;
+      const core = orbEl.querySelector('.juno-orb-core');
+      if (!core) return;
+      orbEl.dataset.lookBound = '1';
+      const hit = opts.hitEl || orbEl;
+      const strength = opts.strength ?? 1;
+      let targetX = 0, targetY = 0, curX = 0, curY = 0;
+      let tracking = false;
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const apply = () => {
+        core.style.setProperty('--lx', (curX * strength).toFixed(3));
+        core.style.setProperty('--ly', (curY * strength).toFixed(3));
+      };
+      const fromEvent = (e) => {
+        const r = hit.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        targetX = clamp(((e.clientX - r.left) / r.width - 0.5) * 2, -1, 1);
+        targetY = clamp(((e.clientY - r.top) / r.height - 0.5) * 2, -1, 1);
+      };
+      hit.addEventListener('pointerenter', () => { tracking = true; });
+      hit.addEventListener('pointerleave', () => { tracking = false; });
+      hit.addEventListener('pointermove', (e) => { tracking = true; fromEvent(e); });
+      const loop = (now) => {
+        if (!orbEl.isConnected) return;
+        if (!tracking) {
+          const t = now * 0.001;
+          targetX = Math.sin(t * 0.55) * 0.32;
+          targetY = Math.sin(t * 0.35) * 0.1;
+        }
+        curX += (targetX - curX) * 0.14;
+        curY += (targetY - curY) * 0.14;
+        apply();
+        requestAnimationFrame(loop);
+      };
+      requestAnimationFrame(loop);
+    }
+    const JUNO_MOODS = {
+      idle: ['…'],
+      thinking: ['Thinking…'],
+      planning: ['Exploring…'],
+      tool: ['Working…'],
+      streaming: ['Generating…'],
+      done: '',
+    };
+    let moodRotateTimer = null;
+    let idleCompanionTimer = null;
+    const BUSY_STATES = new Set(['thinking', 'planning', 'tool', 'streaming']);
+
+    function pickMood(state, hint) {
+      // Never dump long tool labels / URLs into the avatar bubble
+      if (hint) {
+        const h = String(hint);
+        if (h.length > 18 || /https?:\/\//i.test(h) || /Fetched |Web search |Searched /.test(h)) {
+          /* fall through to pool */
+        } else {
+          return h;
+        }
+      }
+      const pool = JUNO_MOODS[state];
+      if (!pool) return '';
+      if (typeof pool === 'string') return pool;
+      return pool[0] || '';
+    }
+
+    function initialSpriteState() {
+      if (planMode) return 'planning';
+      if (chatMode === 'chat') return 'thinking';
+      return 'thinking';
+    }
+
+    function junoSpriteHTML(size = 'sm', state = 'idle') {
+      const lg = size === 'lg';
+      const idleHint = lg ? pickMood('idle') : '';
+      const mood = `<div class="juno-mood${lg ? ' show-idle' : ''}" aria-live="polite"><span class="juno-mood-dot"></span><span class="juno-mood-dots"><i></i><i></i><i></i></span><span class="juno-mood-text">${esc(idleHint)}</span></div>`;
+      return `<div class="juno-sprite-wrap${lg ? ' lg juno-idle-alive' : ''}" data-state="${state}">
+        <div class="juno-companion">
+          <button type="button" class="juno-sprite" title="点我查看思考过程">
+            <span class="juno-think-ring" aria-hidden="true"></span>
+            <span class="juno-sprite-glow" aria-hidden="true"></span>
+            <span class="juno-orbit" aria-hidden="true"></span>
+            ${junoSpiritMarkup()}
+          </button>${mood}
+        </div>
+      </div>`;
+    }
+
+    function setSpriteState(wrap, state, moodText) {
+      if (!wrap) return;
+      // Settled replies stay idle unless explicitly streaming/tool mid-turn (shouldn't)
+      if (wrap.classList.contains('reply-settled') && (state === 'thinking' || state === 'planning')) {
+        return;
+      }
+      const st = state || 'idle';
+      wrap.dataset.state = st;
+      wrap.classList.toggle('juno-session-active', BUSY_STATES.has(st));
+      if (BUSY_STATES.has(st)) wrap.classList.remove('reply-settled');
+      // Mid-task after a mixed praise: clear smile so turn video can play
+      if (BUSY_STATES.has(st) && wrap.dataset.praiseIntent === 'after') {
+        wrap.querySelector('.juno-orb--video')?.removeAttribute('data-expr');
+      }
+      syncOrbMotion(wrap);
+      const moodEl = wrap.querySelector('.juno-mood');
+      const t = wrap.querySelector('.juno-mood-text');
+      if (!t) return;
+      moodEl?.classList.toggle('busy', BUSY_STATES.has(st));
+      const gen = (Number(wrap.dataset.moodGen) || 0) + 1;
+      wrap.dataset.moodGen = String(gen);
+      if (st === 'idle') {
+        t.style.opacity = '1';
+        t.textContent = wrap.classList.contains('lg') ? (moodText || pickMood('idle')) : '';
+        moodEl?.classList.toggle('show-idle', wrap.classList.contains('lg') && !!t.textContent);
+        moodEl?.classList.remove('busy');
+        if (moodRotateTimer) { clearInterval(moodRotateTimer); moodRotateTimer = null; }
+        return;
+      }
+      if (st === 'streaming' && moodRotateTimer) {
+        clearInterval(moodRotateTimer);
+        moodRotateTimer = null;
+      }
+      moodEl?.classList.remove('show-idle');
+      // Message avatars: only busy dots, no chatty bubble (Cursor-like)
+      if (!wrap.classList.contains('lg')) {
+        t.textContent = '';
+        t.style.opacity = '0';
+        return;
+      }
+      const label = pickMood(st, moodText);
+      if (t.textContent !== label) {
+        t.style.opacity = '0';
+        requestAnimationFrame(() => {
+          if (String(wrap.dataset.moodGen) !== String(gen)) return;
+          t.textContent = label;
+          t.style.opacity = '1';
+        });
+      }
+      if (BUSY_STATES.has(st) && st !== 'streaming') {
+        if (moodRotateTimer) { clearInterval(moodRotateTimer); moodRotateTimer = null; }
+      } else if (moodRotateTimer) {
+        clearInterval(moodRotateTimer);
+        moodRotateTimer = null;
+      }
+    }
+
+    function startIdleCompanion() {
+      if (idleCompanionTimer) clearInterval(idleCompanionTimer);
+      idleCompanionTimer = setInterval(() => {
+        if (sending) return;
+        const wrap = document.querySelector('#welcome .juno-sprite-wrap.lg') ||
+          document.querySelector('.welcome-hero .juno-sprite-wrap.lg');
+        if (!wrap || wrap.dataset.state !== 'idle') return;
+        const t = wrap.querySelector('.juno-mood-text');
+        if (t) {
+          t.style.opacity = '0';
+          setTimeout(() => { t.textContent = pickMood('idle'); t.style.opacity = '1'; }, 150);
+        }
+        wrap.classList.add('juno-idle-nudge');
+        setTimeout(() => wrap.classList.remove('juno-idle-nudge'), 900);
+      }, 9000);
+    }
+
+    function stopIdleCompanion() {
+      if (idleCompanionTimer) { clearInterval(idleCompanionTimer); idleCompanionTimer = null; }
+    }
+
+    function bindWelcomeSprite() {
+      const wrap = $('#welcome .juno-sprite-wrap') || document.querySelector('.welcome-hero .juno-sprite-wrap');
+      if (!wrap || wrap.dataset.spriteBound) return;
+      if (!wrap.querySelector('.juno-sprite')) {
+        wrap.outerHTML = junoSpriteHTML('lg', 'idle');
+        bindWelcomeSprite();
+        return;
+      }
+      wrap.dataset.spriteBound = '1';
+      const greetings = ['嗨～', '在呢 ✨', '有什么想问的？', '轻轻戳我一下～'];
+      let gi = 0;
+      const btn = wrap.querySelector('.juno-sprite');
+      btn?.addEventListener('click', () => {
+        setSpriteState(wrap, 'done', greetings[gi % greetings.length]);
+        gi++;
+        setTimeout(() => { setSpriteState(wrap, 'idle'); startIdleCompanion(); }, 2200);
+      });
+      const orb = wrap.querySelector('.juno-orb');
+      if (orb) bindOrbLook(orb, { hitEl: btn || wrap, strength: 1 });
+      syncOrbMotion(wrap);
+      startIdleCompanion();
+    }
+
+    function formatErrorHtml(msg) {
+      const m = String(msg || '');
+      if (/402|Insufficient Balance|余额不足/i.test(m)) {
+        return `<div class="error-card balance">
+          <h4>💳 DeepSeek 余额不足</h4>
+          <p>API 返回 402。请去 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 控制台</a> 充值，或在右上角「模型设置」切换到 Ollama 本地模型。</p>
+        </div>`;
+      }
+      if (/failed to fetch|network|服务未连接|ECONNREFUSED/i.test(m)) {
+        return `<div class="error-card">
+          <h4>连接失败</h4>
+          <p>${esc(m)}</p>
+          <p style="margin-top:.5rem;font-size:.78rem;color:var(--muted)">请确认 Juno 服务在运行：<code>python scripts/juno_training_server.py</code></p>
+        </div>`;
+      }
+      return `<div class="error-card"><p>${esc(m)}</p></div>`;
+    }
+
     function timeGreeting() {
       const h = new Date().getHours();
       if (h < 6) return '夜深了';
@@ -1956,39 +3418,92 @@
 
     function buildWelcomeHtml() {
       const g = timeGreeting();
-      return `<div class="welcome" id="welcome">
+      return `<div class="welcome welcome-hero" id="welcome">
+      ${junoSpriteHTML('lg', 'idle')}
       <h3>${g}</h3>
-      <p>我是 Juno。Agent 可读改代码，Plan 只规划，Ask 只读，Chat 纯对话。底部 ∞ 切换模式。</p></div>`;
+      <p class="welcome-tagline">我是 Juno，陪在你旁边的小灵体<br>思考时会在旁边轻轻说话，点我可以看过程</p>
+      <div class="welcome-chips">
+        <button type="button" class="welcome-chip" data-q="介绍一下你自己">👋 认识 Juno</button>
+        <button type="button" class="welcome-chip" data-q="今天有什么可以帮我的？">💡 今天帮什么</button>
+        <button type="button" class="welcome-chip" data-q="帮我看看当前项目结构">📁 看项目</button>
+      </div></div>`;
     }
 
-    function setJunoState(state) {
-      const rs = $('#run-status');
-      if (rs) rs.style.display = (state === 'thinking' || state === 'streaming') ? 'inline' : 'none';
+    function junoAvatarHTML() {
+      return junoSpriteHTML('sm', 'idle');
     }
 
-    function junoAvatarHTML() { return ''; }
+    function applySessionEnded(ended, { toastMsg } = {}) {
+      sessionEnded = !!ended;
+      const banner = $('#session-ended-banner');
+      const box = $('#composer-box');
+      const input = $('#input');
+      const btn = $('#btn-send');
+      banner?.classList.toggle('show', sessionEnded);
+      box?.classList.toggle('is-ended', sessionEnded);
+      if (sessionEnded) {
+        if (input) {
+          input.disabled = true;
+          input.placeholder = '本会话已结束 · 点「新对话」继续';
+          input.blur();
+        }
+        if (btn) btn.disabled = true;
+        if (toastMsg) toast(toastMsg);
+      } else if (!sending) {
+        if (input) {
+          input.disabled = false;
+          const meta = MODE_META[chatMode] || MODE_META.chat;
+          if (!input.value.trim()) input.placeholder = meta.placeholder;
+        }
+        if (btn) btn.disabled = false;
+      }
+    }
 
     function releaseSendLock() {
       if (sendWatchdog) { clearTimeout(sendWatchdog); sendWatchdog = null; }
       sending = false;
       abortCtrl = null;
-      setJunoState(null);
+      setRunStatus(false);
+      $('#composer-box')?.classList.remove('is-sending');
+      $('#app-root')?.classList.remove('juno-sending');
       const btn = $('#btn-send'), input = $('#input'), stop = $('#btn-stop');
-      if (btn) btn.disabled = false;
       if (stop) stop.classList.remove('show');
-      if (input) { input.disabled = false; input.focus(); }
+      if (sessionEnded) {
+        applySessionEnded(true);
+      } else {
+        if (btn) btn.disabled = false;
+        if (input) { input.disabled = false; input.focus(); }
+      }
+      startIdleCompanion();
+    }
+
+    function armSendWatchdog() {
+      if (sendWatchdog) clearTimeout(sendWatchdog);
+      // Agent tool loops often >3min; activity resets. Idle wall-clock still capped.
+      const ms = (agentMode || chatMode === 'agent') ? 600000 : 300000;
+      sendWatchdog = setTimeout(() => {
+        if (!sending) return;
+        try { abortCtrl?.abort(); } catch (_) { /* ignore */ }
+        releaseSendLock();
+        toast('请求超时，已解锁');
+      }, ms);
+    }
+
+    function pokeSendWatchdog() {
+      if (sending) armSendWatchdog();
     }
 
     function acquireSendLock() {
       sending = true;
+      stopIdleCompanion();
       abortCtrl = new AbortController();
-      setJunoState('thinking');
+      // Don't poke previous message's sprite — wait until new assistant row exists
+      setRunStatus(true);
+      $('#composer-box')?.classList.add('is-sending');
+      $('#app-root')?.classList.add('juno-sending');
       $('#btn-send').disabled = true;
       $('#btn-stop')?.classList.add('show');
-      if (sendWatchdog) clearTimeout(sendWatchdog);
-      sendWatchdog = setTimeout(() => {
-        if (sending) { releaseSendLock(); toast('请求超时，已解锁'); }
-      }, 180000);
+      armSendWatchdog();
     }
 
     function toast(msg) {
@@ -2314,6 +3829,10 @@
       }
       s = s.trim();
       if (!s) return '';
+      s = s.replace(/^>\s+/, '');
+      s = s.replace(/[「」]/g, '"');
+      s = s.replace(/[『』]/g, '"');
+      s = s.replace(/\uFFFD/g, '');
       s = s.replace(/^[【\[]([^\]】]+)[\]】]\s*/u, '$1：');
       s = s.replace(/【/g, '').replace(/】/g, '');
       s = s.replace(/^#{1,6}\s+/, '');
@@ -2409,6 +3928,13 @@
       if (!parts.length) parts.push({ type: 'text', content: src });
       const html = parts.map(p => {
         if (p.type === 'code') {
+          const lang = String(p.lang || '').toLowerCase();
+          if (lang === 'mermaid') {
+            return `<div class="juno-viz juno-mermaid">${esc(p.content)}</div>`;
+          }
+          if (lang === 'chart' || lang === 'chartjs') {
+            return `<div class="juno-viz juno-chart-wrap"><pre class="juno-chart-src" hidden>${esc(p.content)}</pre><canvas aria-label="chart"></canvas></div>`;
+          }
           return `<pre class="hljs-block"><code class="language-${esc(p.lang || 'plaintext')}">${esc(p.content)}</code></pre>`;
         }
         const blocks = toFriendlyBlocks(p.content);
@@ -2421,6 +3947,70 @@
         }).join('');
       }).join('');
       return html || '<p></p>';
+    }
+
+    async function hydrateVisuals(root) {
+      if (!root) return;
+      const mermaidNodes = [...root.querySelectorAll('.juno-mermaid:not([data-rendered])')];
+      if (mermaidNodes.length && window.mermaid) {
+        try {
+          window.mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose',
+            fontFamily: 'DM Sans, Segoe UI, sans-serif',
+          });
+        } catch (_) { /* already init */ }
+        for (const el of mermaidNodes) {
+          el.dataset.rendered = '1';
+          const src = el.textContent || '';
+          const id = 'juno-mmd-' + Math.random().toString(36).slice(2, 10);
+          try {
+            const { svg } = await window.mermaid.render(id, src);
+            el.innerHTML = svg;
+          } catch (e) {
+            el.innerHTML = `<pre class="hljs-block"><code>${esc(src)}</code></pre><div class="juno-viz-err">Mermaid: ${esc(e.message || e)}</div>`;
+          }
+        }
+      }
+      const chartWraps = [...root.querySelectorAll('.juno-chart-wrap:not([data-rendered])')];
+      if (chartWraps.length && window.Chart) {
+        for (const wrap of chartWraps) {
+          wrap.dataset.rendered = '1';
+          const srcEl = wrap.querySelector('.juno-chart-src');
+          const canvas = wrap.querySelector('canvas');
+          const raw = (srcEl?.textContent || '').trim();
+          try {
+            const cfg = JSON.parse(raw);
+            if (!cfg || typeof cfg !== 'object') throw new Error('chart JSON 须为对象');
+            const type = cfg.type || 'bar';
+            const data = cfg.data || cfg;
+            const options = Object.assign({
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: { legend: { labels: { color: '#ccc' } } },
+              scales: cfg.scales || undefined,
+            }, cfg.options || {});
+            if (options.scales) {
+              for (const axis of Object.values(options.scales)) {
+                if (axis && typeof axis === 'object') {
+                  axis.ticks = Object.assign({ color: '#858585' }, axis.ticks || {});
+                  axis.grid = Object.assign({ color: 'rgba(255,255,255,.08)' }, axis.grid || {});
+                }
+              }
+            } else if (['bar', 'line', 'scatter', 'bubble'].includes(type)) {
+              options.scales = {
+                x: { ticks: { color: '#858585' }, grid: { color: 'rgba(255,255,255,.08)' } },
+                y: { ticks: { color: '#858585' }, grid: { color: 'rgba(255,255,255,.08)' } },
+              };
+            }
+            // eslint-disable-next-line no-new
+            new window.Chart(canvas, { type, data, options });
+          } catch (e) {
+            wrap.innerHTML = `<pre class="hljs-block"><code>${esc(raw)}</code></pre><div class="juno-viz-err">Chart: ${esc(e.message || e)}</div>`;
+          }
+        }
+      }
     }
 
     function renderMarkdown(raw) {
@@ -2436,7 +4026,7 @@
         this.lineEl = null;
         this.cursorEl = null;
         this.raf = null;
-        this.ensureDom();
+        // Do NOT wipe think-placeholder until first token — otherwise empty grey box
       }
       ensureDom() {
         if (!this.bubble || this.lineEl) return;
@@ -2444,8 +4034,14 @@
         this.lineEl = this.bubble.querySelector('.stream-line');
         this.cursorEl = this.bubble.querySelector('.typing-cursor');
       }
+      resetDom() {
+        this.lineEl = null;
+        this.cursorEl = null;
+        this.ensureDom();
+      }
       push(chunk) {
         this.raw += chunk;
+        if (!this.lineEl?.isConnected) this.resetDom();
         if (!this.raf) this.raf = requestAnimationFrame(() => this.flush());
       }
       flush() {
@@ -2478,6 +4074,7 @@
         window.JunoCursorUI.highlightCodeBlocks(bubble);
         window.JunoCursorUI.linkCitations(bubble);
       }
+      hydrateVisuals(bubble);
     }
 
     const WELCOME_HTML = buildWelcomeHtml();
@@ -2543,7 +4140,8 @@
     function renderMessages(messages) {
       const box = $('#messages');
       box.innerHTML = '';
-      if (!messages.length) { box.innerHTML = buildWelcomeHtml(); bindChips(); return; }
+      if (!messages.length) { box.innerHTML = buildWelcomeHtml(); bindChips(); startIdleCompanion(); return; }
+      stopIdleCompanion();
       messages.forEach(m => {
         const { msgBody } = appendMessage(m.role, m.content, false);
         if (m.role === 'assistant' && m.trace?.length && window.JunoCursorUI) {
@@ -2555,14 +4153,20 @@
     }
 
     function modePlaceholder() {
-      if (chatMode === 'chat') return '正在思考…';
-      if (planMode) return '规划中…';
-      if (askMode) return '只读模式…';
-      return '正在想…';
+      if (askMode) return 'Ask · read-only…';
+      if (planMode) return 'Planning next moves…';
+      if (chatMode === 'chat') return 'Thinking…';
+      return 'Thinking…';
     }
 
     function usesAgentRail() {
-      return agentMode || askMode || planMode;
+      // Chat 纯对话：不造假 Exploring（短骂快速划界时尤其离谱）
+      // Agent / Plan / Ask 才走 Cursor 式 CoT rail
+      return chatMode !== 'chat';
+    }
+
+    function needsAgentExecution(text) {
+      return /启动|跑起来|前后端|起服务|开服务|npm\s|pnpm\s|yarn\s|docker\s|uvicorn|项目结构|找.*目录|看(下|看)?配置|读.*配置|改代码|修\s*bug|运行测试|跑测试|pytest|\bbuild\b|编译|部署|list_dir|read_file|run_shell/i.test(String(text || ''));
     }
 
     function appendMessage(role, content, scroll = true) {
@@ -2574,18 +4178,25 @@
         div.innerHTML = `<div class="msg-body"><div class="user-query"></div><div class="bubble" style="display:none"></div>${messageActionsHtml(role)}</div>`;
         div.querySelector('.user-query').textContent = content || '';
       } else {
-        div.innerHTML = `<div class="msg-body"><div class="bubble"></div>${messageActionsHtml(role)}</div>`;
+        div.innerHTML = `<div class="msg-body"><div class="msg-row">${junoAvatarHTML()}<div class="msg-content"><div class="msg-head"><span class="msg-name">Juno</span>${messageActionsHtml(role)}</div><div class="bubble"></div></div></div></div>`;
+        const orb = div.querySelector('.juno-orb');
+        const btn = div.querySelector('.juno-sprite');
+        if (orb) bindOrbLook(orb, { hitEl: btn || orb, strength: 0.75 });
       }
       box.appendChild(div);
       const msgBody = div.querySelector('.msg-body');
       const bubble = div.querySelector('.bubble');
       let rail = null;
       if (role === 'assistant' && !content) {
+        const wrap = div.querySelector('.juno-sprite-wrap');
+        const initSt = initialSpriteState();
+        setSpriteState(wrap, initSt, modePlaceholder());
+        wrap?.classList.add('juno-session-active');
         if (usesAgentRail()) {
           rail = new AgentRail(msgBody);
           bubble.innerHTML = '<p class="think-placeholder">' + esc(modePlaceholder()) + '</p>';
         } else {
-          bubble.innerHTML = '<p class="think-placeholder">正在思考…</p>';
+          bubble.innerHTML = '<p class="think-placeholder">' + esc(modePlaceholder()) + '</p>';
         }
       } else if (role === 'assistant') {
         setBubbleContent(bubble, role, content);
@@ -2622,6 +4233,7 @@
       if (!box) return;
       stickToBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
       $('#scroll-fab')?.classList.toggle('show', !stickToBottom);
+      updateScrollFab();
     });
     $('#scroll-fab').onclick = () => scrollMessages(true);
 
@@ -2633,6 +4245,7 @@
       pendingAttachments = (s.attachments || []).map(a => ({ ...a }));
       renderAttachBar();
       renderMessages(s.messages || []);
+      applySessionEnded(!!s.conversation_ended);
       window.JunoCursorUI?.onSessionMessages(s.messages || []);
       window.JunoCursorUI?.reviewBar?.loadFromServer();
       loadSessions(id);
@@ -2647,11 +4260,15 @@
       renderAttachBar();
       $('#chat-title').textContent = '新对话';
       renderMessages([]);
+      applySessionEnded(false);
       loadSessions(sessionId);
-      toast('新对话已创建');
     }
 
     async function sendMessage(text, opts = {}) {
+      if (sessionEnded && !opts.regenerate) {
+        toast('本会话已结束，请开新对话');
+        return;
+      }
       const regenerate = !!opts.regenerate;
       text = regenerate ? '' : (text || $('#input').value).trim();
       const pathOnly = !regenerate && tryAttachPathFromText(text);
@@ -2664,6 +4281,12 @@
       const ctx = window.__junoContextPaths?.() || [];
       const hasAttach = pendingAttachments.length > 0;
       if ((!text && !regenerate && !hasAttach && !ctx.length) || sending) return;
+
+      // Chat 不能装动手：启动/前后端/看仓库 → 自动切 Agent（与服务端一致）
+      if (!regenerate && chatMode === 'chat' && needsAgentExecution(text)) {
+        applyChatMode('agent', { silent: true });
+        toast('已切到 ∞ Agent（这类任务需要工具）');
+      }
 
       if (!regenerate && text.startsWith('/')) {
         const parts = text.slice(1).trim().split(/\s+/);
@@ -2687,23 +4310,53 @@
         resetInputHeight();
         appendMessage('user', text);
       }
-      const { bubble, msgBody, rail } = appendMessage('assistant', '');
+      const praise = regenerate ? null : praiseIntent(text);
+      pendingPraiseIntent = praise;
+      if (!praise) {
+        document.querySelectorAll('#welcome .juno-orb--video[data-expr="smile"]').forEach((o) => o.removeAttribute('data-expr'));
+      }
+      let bubble, msgBody, rail;
+      try {
+        ({ bubble, msgBody, rail } = appendMessage('assistant', ''));
+      } catch (err) {
+        releaseSendLock();
+        toast('界面渲染失败：' + (err.message || err));
+        return;
+      }
+      if (praise) {
+        const replyWrap = msgBody?.querySelector('.juno-sprite-wrap');
+        if (replyWrap) {
+          replyWrap.dataset.praiseIntent = praise;
+          if (praise === 'now') setOrbExpr(replyWrap, 'smile', 0);
+        }
+        const welcome = document.querySelector('#welcome .juno-sprite-wrap');
+        if (welcome && praise === 'now') applyPraiseToOrb(welcome, 'now');
+      }
       const live = new LiveStream(bubble, () => scrollMessages());
       setStreamingScroll(true);
-      setJunoState('thinking');
+      setJunoState(planMode ? 'planning' : 'thinking', modePlaceholder());
+      // Pure praise: keep smile instead of playing the turn clip while answering
+      if (praise === 'now') {
+        const wrap = msgBody?.querySelector('.juno-sprite-wrap') || activeSpriteWrap();
+        if (wrap) setOrbExpr(wrap, 'smile', 0);
+      }
 
       let gotText = false;
       let finalized = false;
-      const stopThinkUI = () => setJunoState(null);
+      const stopThinkUI = () => {};
 
       const finalizeBubble = (finalText, sid) => {
         if (finalized) return;
         finalized = true;
         live.finish();
-        rail?.finish();
+        clearThinkPlaceholder();
         setStreamingScroll(false);
-        stopThinkUI();
-        bubble.classList.remove('streaming');
+        bubble.classList.remove('streaming', 'streaming-live');
+        msgBody?.querySelector('.msg-row')?.classList.remove('streaming-turn');
+        const wrap = msgBody?.querySelector('.juno-sprite-wrap') || activeSpriteWrap();
+        // Always settle — rail finish + hard idle (答完绝不再显示「正在想」)
+        try { rail?.finish(); } catch (_) { /* ignore */ }
+        settleSpriteAfterReply(wrap, { instant: true });
         const content = finalText || live.raw || '（无回复）';
         setBubbleContent(bubble, 'assistant', content);
         const msgEl = msgBody?.closest('.msg');
@@ -2712,33 +4365,64 @@
         if (sid) sessionId = sid;
         if (!regenerate && text) $('#chat-title').textContent = text.slice(0, 32);
         loadSessions(sessionId);
-        setJunoState(null);
         scrollMessages();
       };
 
-      const finishOk = (content, sid) => {
+      const finishOk = (content, sid, meta = {}) => {
         finalizeBubble(content || live.raw || '（无回复）', sid);
+        // Only server flag locks — do not lock because model casually said「会话结束」
+        if (meta.conversation_ended) {
+          applySessionEnded(true, { toastMsg: '本会话已结束' });
+        }
+      };
+
+      const clearThinkPlaceholder = () => {
+        bubble.querySelector('.think-placeholder')?.remove();
       };
 
       const handleSseBlock = (block, state) => {
         if (!block.trim()) return;
+        pokeSendWatchdog();
         let event = 'message', data = '';
         for (const line of block.split('\n')) {
           if (line.startsWith('event:')) event = line.slice(6).trim();
-          else if (line.startsWith('data:')) data = line.slice(5).trim();
+          else if (line.startsWith('data:')) data += (data ? '\n' : '') + line.slice(5).trim();
         }
         if (!data) return;
-        const obj = JSON.parse(data);
-        if (event === 'plan' || event === 'prefetch' || event === 'tool' || event === 'thinking_delta' || event === 'subagent') {
-          if (!usesAgentRail()) return;
-          setJunoState('thinking');
-          if (bubble.querySelector('.think-placeholder')) bubble.innerHTML = '';
-          if (event === 'thinking_delta' && obj.text) {
-            rail?.push({ type: 'thinking_delta', text: obj.text });
-            scrollMessages();
-            return;
+        let obj;
+        try { obj = JSON.parse(data); }
+        catch (_) { return; }
+        if (event === 'thinking_delta' || event === 'thinking') {
+          clearThinkPlaceholder();
+          const wrap = activeSpriteWrap();
+          if (usesAgentRail()) {
+            setJunoState('thinking');
+            rail?.push({
+              ...obj,
+              type: event === 'thinking' ? 'thinking' : 'thinking_delta',
+              text: obj.text || '',
+              id: obj.id,
+              phase: obj.phase,
+            });
+          } else if (wrap) {
+            setSpriteState(wrap, 'thinking', '思考中…');
           }
-          rail?.push({ ...obj, type: event, id: obj.id || (event + '-' + (obj.label || obj.name || '') + '-' + (obj.phase || '')) });
+          return;
+        }
+        if (event === 'plan' || event === 'prefetch' || event === 'tool' || event === 'subagent' || event === 'chain') {
+          // Keep bubble placeholder until we have a real rail row or answer text —
+          // clearing early left an empty grey box while waiting.
+          const wrap = activeSpriteWrap();
+          if (usesAgentRail()) {
+            if (event === 'plan' || event === 'chain') setJunoState('planning', planMode ? 'Planning…' : 'Exploring…');
+            else setJunoState('thinking');
+            rail?.push({ ...obj, type: event, id: obj.id || (event + '-' + (obj.label || obj.name || '') + '-' + (obj.phase || '')) });
+            if (rail?.used) clearThinkPlaceholder();
+          } else if (wrap) {
+            if (event === 'plan' || event === 'chain') setSpriteState(wrap, 'planning', 'Exploring…');
+            else if (event === 'tool') setSpriteState(wrap, 'tool', 'Working…');
+            else setSpriteState(wrap, 'thinking', 'Thinking…');
+          }
           if (event === 'subagent') window.JunoCursorUI?.onSubagent(obj);
           if (event === 'tool' && obj.phase === 'done') {
             window.JunoCursorUI?.onTraceDone([obj]);
@@ -2746,15 +4430,27 @@
           scrollMessages();
           return;
         }
+        if (event === 'status' && obj.phase === 'cursor-agent') {
+          if (rail?.statusText) rail.statusText.textContent = 'Cursor Agent 运行中…';
+          rail?.push({ type: 'plan', id: 'plan-main', label: 'Exploring', state: 'active' });
+          setJunoState('planning', 'Exploring…');
+        }
         if (event === 'status' && (obj.phase === 'streaming' || obj.phase === 'agent') && !gotText) {
-          setJunoState('streaming');
+          setJunoState('streaming', 'Generating…');
           bubble.classList.add('streaming');
+          msgBody?.querySelector('.msg-row')?.classList.add('streaming-turn');
+        }
+        if (event === 'status' && obj.phase === 'thinking' && !gotText) {
+          setJunoState('thinking', modePlaceholder());
+          rail?.push({ type: 'plan', id: 'plan-thinking', label: 'Thinking', state: 'active' });
         }
         if (event === 'delta' && obj.text) {
           if (!gotText) {
             gotText = true;
-            setJunoState('streaming');
+            clearThinkPlaceholder();
+            setJunoState('streaming', 'Generating…');
             bubble.classList.add('streaming');
+            msgBody?.querySelector('.msg-row')?.classList.add('streaming-turn');
           }
           state.acc += obj.text;
           live.push(obj.text);
@@ -2762,7 +4458,12 @@
           state.sid = obj.session_id;
           if (obj.content) state.acc = obj.content;
           if (obj.syncing) state.syncing = true;
+          if (obj.conversation_ended) state.conversation_ended = true;
           if (obj.trace) window.JunoCursorUI?.onTraceDone(obj.trace);
+          // Server may promote Chat→Agent; keep picker in sync
+          if (obj.chat_mode && obj.chat_mode !== chatMode) {
+            applyChatMode(obj.chat_mode, { silent: true });
+          }
           window.JunoCursorUI?.loadTodos?.();
         } else if (event === 'error') throw new Error(obj.message || '流式错误');
       };
@@ -2800,10 +4501,10 @@
         const ct = resp.headers.get('content-type') || '';
         if (!ct.includes('event-stream')) {
           const data = await resp.json();
-          finishOk(data.content, data.session_id);
+          finishOk(data.content, data.session_id, data);
           return;
         }
-        const state = { acc: '', sid: null };
+        const state = { acc: '', sid: null, conversation_ended: false };
         const reader = resp.body.getReader();
         const dec = new TextDecoder();
         let buf = '';
@@ -2817,15 +4518,17 @@
           }
           if (done) { if (buf.trim()) handleSseBlock(buf, state); break; }
         }
-        finishOk(state.acc, state.sid);
+        finishOk(state.acc, state.sid, state);
         if (state.syncing) setTimeout(() => toast(agentMode ? 'Agent 完成 · 已同步知识库' : '已同步到知识库 · 自主学习中'), 400);
       } catch (e) {
         if (e.name === 'AbortError') {
-          stopThinkUI();
-          live.finish();
-          const partial = live.raw.trim();
+          live?.finish();
+          const w = msgBody?.querySelector('.juno-sprite-wrap');
+          setSpriteState(w, 'idle');
+          w?.classList.remove('juno-session-active');
+          const partial = live?.raw?.trim() || '';
           if (partial) setBubbleContent(bubble, 'assistant', partial + '\n\n（已停止）');
-          else bubble.innerHTML = '<p>（已停止生成）</p>';
+          else if (bubble) bubble.innerHTML = '<p>（已停止生成）</p>';
           return;
         }
         if (!gotText) {
@@ -2843,27 +4546,33 @@
               method: 'POST', headers: {'Content-Type':'application/json'},
               body: JSON.stringify(body),
             });
-            finishOk(data.content, data.session_id);
+            finishOk(data.content, data.session_id, data);
             return;
           } catch (e2) {
             stopThinkUI();
-            live.finish();
-            bubble.classList.remove('streaming');
-            bubble.innerHTML = '<p>出错了：' + esc(e2.message || e.message) + '</p>';
+            live?.finish();
+            bubble?.classList?.remove('streaming');
+            if (bubble) bubble.innerHTML = formatErrorHtml(e2.message || e.message);
             if (/failed to fetch|network|服务未连接/i.test(String(e2.message || e.message))) {
-              bubble.innerHTML += '<p style="color:var(--muted);font-size:.78rem;margin-top:.5rem">读文件请切 <b>∞ Agent</b>；Chat 模式无工具。服务断了就重启：<code>python scripts/juno_training_server.py</code></p>';
+              /* hint included in formatErrorHtml */
             }
           }
         } else {
           stopThinkUI();
-          live.finish();
-          if (!live.raw.trim()) bubble.innerHTML = '<p>出错了：' + esc(e.message) + '</p>';
+          live?.finish();
+          if (!live?.raw?.trim() && bubble) bubble.innerHTML = formatErrorHtml(e.message);
         }
       } finally {
         stopThinkUI();
-        live.finish();
+        live?.finish();
         setStreamingScroll(false);
-        bubble.classList.remove('streaming');
+        bubble?.classList?.remove('streaming', 'streaming-live');
+        msgBody?.querySelector('.msg-row')?.classList.remove('streaming-turn');
+        const w = msgBody?.querySelector('.juno-sprite-wrap') || activeSpriteWrap();
+        // Always hard-settle if still busy (covers early return / race)
+        if (w && (BUSY_STATES.has(w.dataset.state) || !w.classList.contains('reply-settled'))) {
+          settleSpriteAfterReply(w, { instant: true });
+        }
         releaseSendLock();
       }
     }
@@ -2883,8 +4592,9 @@
     }
 
     function bindChips() {
-      $$('.chip').forEach(c => c.onclick = () => sendMessage(c.dataset.q));
+      $$('.chip, .welcome-chip').forEach(c => c.onclick = () => sendMessage(c.dataset.q));
       $$('.tool-chip').forEach(c => c.onclick = () => sendMessage(c.dataset.q));
+      bindWelcomeSprite();
     }
 
     function bindAllButtons() {
@@ -2899,31 +4609,19 @@
         });
       };
 
-      once('btn-rail-home', () => { closeSidebar(); toast('Juno · Agent 对话'); });
-      once('btn-rail-history', () => {
-        toggleSidebar();
-        toast(document.getElementById('app-root')?.classList.contains('sidebar-open') ? '历史对话' : '已关闭侧栏');
-      });
+      once('btn-rail-home', () => closeSidebar());
+      once('btn-rail-history', () => toggleSidebar());
       once('btn-rail-new', () => newChat());
-      once('btn-rail-explorer', () => {
-        window.JunoExplorer?.toggle();
-        toast(document.getElementById('app-root')?.classList.contains('explorer-open') ? '资源管理器' : '已关闭文件树');
-      });
+      once('btn-ended-new', () => newChat());
+      once('btn-rail-explorer', () => window.JunoExplorer?.toggle());
       once('btn-rail-subagent', () => {
         const p = window.JunoCursorUI?.subagentPanel;
-        if (p) { p.toggle(); toast(p.panel?.classList.contains('open') ? '子代理面板' : '已关闭子代理'); }
+        if (p) p.toggle();
         else toast('子代理模块未加载');
       });
-      once('btn-rail-terminal', () => {
-        const t = window.JunoCursorUI?.terminal;
-        if (t) { t.toggle(); toast(t.panel?.classList.contains('open') ? '终端输出' : '已关闭终端'); }
-        else toast('终端模块未加载');
-      });
-      once('btn-rail-cmdk', () => {
-        if (window.JunoCursorUI?.cmdk) { window.JunoCursorUI.cmdk.open(); toast('Inline Edit · Ctrl+K'); }
-        else toast('Cmd+K 模块未加载');
-      });
-      once('btn-rail-settings', () => { refreshStatus(); $('#modal')?.classList.add('show'); toast('模型设置'); });
+      once('btn-rail-terminal', () => window.JunoCursorUI?.terminal?.toggle());
+      once('btn-rail-cmdk', () => window.JunoCursorUI?.cmdk?.open());
+      once('btn-rail-settings', () => { refreshStatus(); $('#modal')?.classList.add('show'); });
 
       once('btn-new-top', () => newChat());
       once('btn-new', () => newChat());
@@ -2931,7 +4629,7 @@
       once('btn-panel-title', () => toggleSidebar());
       once('btn-panel-history', () => toggleSidebar());
       once('btn-send', () => sendMessage());
-      once('btn-stop', () => { if (abortCtrl) abortCtrl.abort(); toast('已停止'); });
+      once('btn-stop', () => { if (abortCtrl) abortCtrl.abort(); });
       /* btn-upload → bindAttachMenu() */
       once('btn-lock', () => {
         if (chatMode === 'agent') applyChatMode('ask');
@@ -2940,7 +4638,7 @@
       });
       once('btn-mode', (e) => { e.stopPropagation(); $('#mode-menu')?.classList.toggle('open'); });
       once('btn-settings-head', (e) => { e.stopPropagation(); $('#head-menu')?.classList.toggle('open'); });
-      once('btn-settings', () => { refreshStatus(); $('#modal')?.classList.add('show'); toast('模型设置'); });
+      once('btn-settings', () => { refreshStatus(); $('#modal')?.classList.add('show'); });
 
       const ab = document.querySelector('.auto-badge');
       if (ab && !ab.dataset.bound) {
@@ -2955,8 +4653,8 @@
         btn.addEventListener('click', async () => {
           $('#head-menu')?.classList.remove('open');
           const a = btn.dataset.action;
-          if (a === 'settings') { refreshStatus(); $('#modal')?.classList.add('show'); toast('模型设置'); }
-          else if (a === 'mcp') { window.JunoMcpModal?.open(); toast('MCP 服务器'); }
+          if (a === 'settings') { refreshStatus(); $('#modal')?.classList.add('show'); }
+          else if (a === 'mcp') window.JunoMcpModal?.open();
           else if (a === 'studio') location.href = '/studio';
           else if (a === 'rebuild') {
             toast('正在重建索引…');
@@ -2997,8 +4695,33 @@
     $('#input').oninput = autoResize;
     $('#input').onkeydown = e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-      if (e.key === 'Escape' && sending) abortCtrl?.abort();
+      if (e.key === 'Escape') {
+        if (sending) abortCtrl?.abort();
+        else closeFloatingPanels();
+      }
     };
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        newChat();
+      }
+      if (e.key === 'Escape' && !sending && document.activeElement !== $('#input')) {
+        closeFloatingPanels();
+      }
+    });
+
+    function closeFloatingPanels() {
+      closeSidebar();
+      $('#mode-menu')?.classList.remove('open');
+      $('#head-menu')?.classList.remove('open');
+      $('#attach-menu')?.classList.remove('open');
+      document.getElementById('slash-menu')?.classList.remove('show');
+      document.getElementById('mention-menu')?.classList.remove('show');
+      window.JunoCursorUI?.subagentPanel?.close?.();
+      window.JunoCursorUI?.terminal?.close?.();
+      $('#modal')?.classList.remove('show');
+      $('#review-drawer')?.classList.remove('show');
+    }
     $('#btn-rebuild-index')?.addEventListener('click', async () => {
       toast('正在重建索引…');
       try {
@@ -3031,6 +4754,7 @@
     };
 
     bindChips();
+    bindWelcomeSprite();
     bindAllButtons();
     loadPresets();
     refreshStatus();
@@ -3043,15 +4767,18 @@
       const r = await api('/api/chat/sessions');
       if (r.items?.length) await openSession(r.items[0].id);
       else await newChat();
+      $('#input')?.focus();
     })();
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="/cursor-diff-editor.js?v=27"></script>
-  <script src="/cursor-terminal.js?v=27"></script>
-  <script src="/cursor-cmdk.js?v=27"></script>
-  <script src="/cursor-explorer.js?v=27"></script>
-  <script src="/cursor-slash.js?v=27"></script>
-  <script src="/cursor-mcp-modal.js?v=27"></script>
-  <script src="/cursor-ui.js?v=27"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="/cursor-diff-editor.js?v=32"></script>
+  <script src="/cursor-terminal.js?v=32"></script>
+  <script src="/cursor-cmdk.js?v=32"></script>
+  <script src="/cursor-explorer.js?v=32"></script>
+  <script src="/cursor-slash.js?v=32"></script>
+  <script src="/cursor-mcp-modal.js?v=32"></script>
+  <script src="/cursor-ui.js?v=32"></script>
 </body>
 </html>

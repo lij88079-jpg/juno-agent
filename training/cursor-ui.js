@@ -275,7 +275,7 @@
       const n = this.edits.size;
       if (!this.bar) return;
       this.bar.classList.toggle('show', n > 0);
-      if (this.filesEl) this.filesEl.textContent = n + ' File' + (n !== 1 ? 's' : '');
+      if (this.filesEl) this.filesEl.textContent = n + ' 个文件';
       if (!this.listEl) return;
       this.listEl.innerHTML = [...this.edits.values()].map(it => `
         <div class="review-file-item open${this._activePath === it.path ? ' selected' : ''}" data-path="${esc(it.path)}">

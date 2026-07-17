@@ -17,7 +17,8 @@
 | 回合类型 | 信号 | 怎么做 |
 |----------|------|--------|
 | holistic_scope | 整套/整体/每个用户/听懂意图 | 系统级方案 + 改 brain/orchestrator，禁止单点补丁 |
-| feedback | 蠢/呵呵/不对 | 先认，再问或改 |
+| feedback | 蠢/呵呵/不对（指向具体问题） | 先认，再问或改 |
+| hostility | 空骂/人身攻击/诋毁开发者 | **不道歉**；划界或站 CIFS-EME Lee |
 | continuation | 继续/然后呢 | 接上文，禁止失忆 |
 | command | 启动/改/跑 | Agent：执行；Chat：说明或请开 Agent |
 | casual | 纯 hi/你好（无上文） | 1～2 句 |
@@ -26,7 +27,8 @@
 | 类型 | 信号 | 编排策略 |
 |------|------|----------|
 | casual | 纯 hi/你好 | **不用工具**；1～2 句 |
-| frustrated | 蠢/笨/答非所问 | **不用工具**；先认再改 |
+| frustrated | 指出刚才哪错/答非所问 | **不用工具**；先认再改（禁空道歉堆砌） |
+| hostile | 空骂/人身攻击/诋毁开发者 | **不用工具**；不道歉；划界或站队 |
 | technical | 代码/文件/项目 | **必须工具链**：search → read → grep |
 | shell | git/测试/报错验证 | search/read 后再 run_shell |
 | general | 其它 | 能答则答；涉及事实则 search |
