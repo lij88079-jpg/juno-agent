@@ -23,7 +23,8 @@ FILE_RE = re.compile(
 )
 
 SHELL_RE = re.compile(
-    r"git\s|npm\s|pnpm\s|yarn\s|pytest|测试|运行|启动|前后端|报错|exit code|构建|build|commit|docker\s|uvicorn",
+    r"git\s|npm\s|pnpm\s|yarn\s|pytest|测试|运行|启动|跑起来|跑吧|跑一下|前后端|报错|"
+    r"exit code|构建|build|commit|docker\s|uvicorn|起服务|开服务",
     re.I,
 )
 
@@ -33,10 +34,37 @@ VISUAL_RE = re.compile(
 )
 
 # Proper-noun / product-ish asks that need lookup before drawing or explaining
+# NOTE: do NOT include 校园 alone — it matches local project names like 龙猫校园.
 LOOKUP_RE = re.compile(
-    r"(是什么|介绍|详解|系统|平台|产品|项目|功能|校园|官网|官网|怎么用)",
+    r"(是什么|介绍一下|详解|官网|怎么用|什么平台|什么系统)",
     re.I,
 )
+
+ACTION_SPRINT_RE = re.compile(
+    r"跑起来|跑吧|跑一下|启动|起服务|开服务|改一下|修一下|弄一下|重启|"
+    r"pnpm\s|npm\s|yarn\s|dev\b|build\b",
+    re.I,
+)
+
+
+def is_action_sprint(user_message: str) -> bool:
+    """User wants hands-on run/fix now — skip slow research theater."""
+    t = (user_message or "").strip()
+    if not t:
+        return False
+    if ACTION_SPRINT_RE.search(t):
+        return True
+    if SHELL_RE.search(t) and (
+        juno_tools.resolve_project_alias(t)
+        or any(
+            str(k).lower() in t.lower()
+            for proj in juno_tools.load_projects()
+            for k in ([proj.get("label") or ""] + list(proj.get("aliases") or []))
+            if k and len(str(k)) >= 2
+        )
+    ):
+        return True
+    return False
 
 
 def wants_visual(user_message: str) -> bool:
@@ -44,9 +72,13 @@ def wants_visual(user_message: str) -> bool:
 
 
 def needs_topic_lookup(user_message: str) -> bool:
-    """Ambiguous topic (e.g. 龙猫校园) — search before answering/drawing."""
+    """Ambiguous topic — search before answering/drawing. Skip known local projects."""
     t = (user_message or "").strip()
     if not t or juno_tools.extract_paths_from_text(t):
+        return False
+    if is_action_sprint(t):
+        return False
+    if juno_tools.resolve_project_alias(t):
         return False
     # Visual + named topic, or 「X 是什么」 style
     if wants_visual(t) and LOOKUP_RE.search(t):
@@ -104,6 +136,13 @@ def classify_intent(user_message: str, recent_messages: list[dict] | None = None
         return "general"
     if juno_brain.is_casual_opening(t) and not recent_messages:
         return "casual"
+    # Local project + run/fix → shell/file, never research theater
+    if is_action_sprint(t) or juno_tools.resolve_project_alias(t):
+        if SHELL_RE.search(t) or is_action_sprint(t):
+            return "shell"
+        if juno_tools.extract_paths_from_text(t) or FILE_RE.search(t):
+            return "file"
+        return "technical"
     if juno_tools.extract_paths_from_text(t) or FILE_RE.search(t):
         return "file"
     if juno_skills.MEMORY_RE.search(t):

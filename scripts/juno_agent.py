@@ -164,9 +164,14 @@ def parse_native_tool_call(step: dict) -> dict | None:
 def _rail_label(name: str, args: dict) -> str:
     """Cursor IDE style: Read file.py L1-80 / Grepped `pat` / …"""
 
-    def _basename(raw: str) -> str:
+    def _short_path(raw: str) -> str:
         p = str(raw or "").replace("\\", "/").rstrip("/")
-        return p.split("/")[-1] if p else "file"
+        if not p or p in {".", "./"}:
+            return "."
+        parts = [x for x in p.split("/") if x]
+        if len(parts) >= 2:
+            return f"{parts[-2]}/{parts[-1]}"
+        return parts[-1] if parts else "file"
 
     def _line_span(args: dict) -> str:
         try:
@@ -185,7 +190,7 @@ def _rail_label(name: str, args: dict) -> str:
         return ""
 
     if name == "read_file":
-        return f"Read {_basename(args.get('path') or '')}{_line_span(args)}"
+        return f"Read {_short_path(args.get('path') or '')}{_line_span(args)}"
     if name == "search_index":
         q = (args.get("query") or "").strip()[:40]
         return f"Searched `{q}`" if q else "Searched codebase"
@@ -196,14 +201,14 @@ def _rail_label(name: str, args: dict) -> str:
         pat = (args.get("pattern") or args.get("glob") or "").strip()[:40]
         return f"Glob `{pat}`" if pat else "Glob"
     if name == "list_dir":
-        return f"Listed {_basename(args.get('path') or '.')}"
+        return f"Listed {_short_path(args.get('path') or '.')}"
     if name == "find_project":
         q = (args.get("query") or args.get("name") or "").strip()[:40]
         return f"Find project `{q}`" if q else "List projects"
     if name == "write_file":
-        return f"Wrote {_basename(args.get('path') or '')}"
+        return f"Wrote {_short_path(args.get('path') or '')}"
     if name == "str_replace":
-        return f"Edited {_basename(args.get('path') or '')}"
+        return f"Edited {_short_path(args.get('path') or '')}"
     if name == "web_fetch":
         raw = (args.get("url") or "").strip()
         host = ""
@@ -224,9 +229,9 @@ def _rail_label(name: str, args: dict) -> str:
     if name == "git":
         return f"Git {args.get('action', 'status')}"
     if name == "apply_patch":
-        return f"Patched {_basename(args.get('path') or '')}"
+        return f"Patched {_short_path(args.get('path') or '')}"
     if name == "delete_file":
-        return f"Deleted {_basename(args.get('path') or '')}"
+        return f"Deleted {_short_path(args.get('path') or '')}"
     if name == "todo":
         return "Updated todos"
     if name == "task":
@@ -237,7 +242,9 @@ def _rail_label(name: str, args: dict) -> str:
     if name == "think":
         return "Thinking"
     if name == "run_shell":
-        cmd = (args.get("command") or "").strip().replace("\n", " ")[:52]
+        cmd = (args.get("command") or "").strip().replace("\n", " ")
+        if len(cmd) > 72:
+            cmd = cmd[:36] + "…" + cmd[-28:]
         return f"Ran {cmd}" if cmd else "Ran command"
     if name == "shell_job":
         jid = (args.get("job_id") or "")[:10]
@@ -437,6 +444,9 @@ def run_agent_stream_events(
     max_steps = int((cfg.get("tools") or {}).get("maxSteps") or 10)
     prior = juno_brain.dialog_before_current(messages, user_message)
     intent = juno_orchestrator.classify_intent(user_message, prior)
+    sprint = juno_orchestrator.is_action_sprint(user_message)
+    if sprint:
+        max_steps = min(max_steps, 16)
     use_native = juno_brain.supports_native_tools()
     trace: list[dict] = []
     recent_sigs: list[tuple[str, bool]] = []
@@ -448,75 +458,6 @@ def run_agent_stream_events(
     think_count = 0
     exploring_opened = False
     tools_since_think = 0
-
-    # Quiet index hint only (never fake Searched rows on the rail)
-    if should_tools:
-        try:
-            hits = juno_index.search(user_message, top_k=8)
-            paths = [h.get("path") for h in hits if h.get("path")]
-            if paths:
-                hint = "索引预览（勿对用户复述路径清单）：\n" + "\n".join(f"- {p}" for p in paths[:6])
-                extra_system = list(extra_system or []) + [hint]
-        except Exception:
-            pass
-
-    api_msgs = _build_api_messages(
-        messages,
-        user_message,
-        extra_system,
-        chat_mode=chat_mode,
-        plan_mode=plan_mode,
-        ask_mode=ask_mode,
-        context_paths=context_paths,
-        session_title=session_title,
-    )
-    try:
-        auto_turn = (HQ / "knowledge" / "juno-auto-turn.md").read_text(encoding="utf-8")
-        if "<!-- INJECT:auto-turn -->" in auto_turn:
-            block = auto_turn.split("<!-- INJECT:auto-turn -->", 1)[1].split("<!-- END:auto-turn -->", 1)[0].strip()
-            if block and api_msgs and api_msgs[0].get("role") == "system":
-                api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
-    except OSError:
-        pass
-    try:
-        ph = (HQ / "knowledge" / "juno-problem-handling.md").read_text(encoding="utf-8")
-        if "<!-- INJECT:problem-handling -->" in ph:
-            block = ph.split("<!-- INJECT:problem-handling -->", 1)[1].split("<!-- END:problem-handling -->", 1)[0].strip()
-            if block and api_msgs and api_msgs[0].get("role") == "system":
-                api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
-    except OSError:
-        pass
-    try:
-        fo = (HQ / "knowledge" / "juno-file-ops.md").read_text(encoding="utf-8")
-        if "<!-- INJECT:file-ops -->" in fo:
-            block = fo.split("<!-- INJECT:file-ops -->", 1)[1].split("<!-- END:file-ops -->", 1)[0].strip()
-            if block and api_msgs and api_msgs[0].get("role") == "system":
-                api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
-    except OSError:
-        pass
-
-    try:
-        po = (HQ / "knowledge" / "juno-port-ops.md").read_text(encoding="utf-8")
-        if "<!-- INJECT:port-ops -->" in po:
-            block = po.split("<!-- INJECT:port-ops -->", 1)[1].split("<!-- END:port-ops -->", 1)[0].strip()
-            if block and api_msgs and api_msgs[0].get("role") == "system":
-                api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
-    except OSError:
-        pass
-
-    # Tools / lookup need a plan; light chat answers must NOT be forced into think theater
-    force_lookup = juno_orchestrator.needs_topic_lookup(user_message)
-    force_plan = bool(use_native) and (should_tools or force_lookup) and not light
-    # Situation / design / multi-constraint: nudge think. Identity/hi never.
-    force_any_think = bool(use_native) and not light and juno_brain.needs_deliberation(
-        user_message, prior
-    )
-    want_visual = juno_orchestrator.wants_visual(user_message)
-    visual_retry = False
-    lookup_retry = False
-    pending_verify = False
-    verify_nudge_sent = False
-    edited_paths: list[str] = []
 
     def _open_exploring():
         nonlocal exploring_opened
@@ -531,6 +472,111 @@ def run_agent_stream_events(
             "state": "active",
             "started_ms": int(t0 * 1000),
         }
+
+    # Show rail immediately — don't leave a blank Exploring while index/API stalls
+    if should_tools and not light:
+        open_ev = _open_exploring()
+        if open_ev:
+            yield open_ev
+        yield {
+            "type": "thinking",
+            "id": "boot-0",
+            "text": "定位项目并准备动手…" if sprint else "整理任务…",
+            "phase": "start",
+            "label": "Thinking",
+            "state": "active",
+        }
+
+    # Quiet index hint only (never fake Searched rows on the rail)
+    # Action sprints: skip hybrid embed path — TF-IDF only / project prefetch is enough
+    if should_tools and not sprint:
+        try:
+            hits = juno_index.search(user_message, top_k=6)
+            paths = [h.get("path") for h in hits if h.get("path")]
+            if paths:
+                hint = "索引预览（勿对用户复述路径清单）：\n" + "\n".join(f"- {p}" for p in paths[:6])
+                extra_system = list(extra_system or []) + [hint]
+        except Exception:
+            pass
+    if sprint:
+        try:
+            pref = juno_orchestrator.prefetch_project_mentions(user_message)
+            if pref:
+                extra_system = list(extra_system or []) + [pref]
+        except Exception:
+            pass
+
+    api_msgs = _build_api_messages(
+        messages,
+        user_message,
+        extra_system,
+        chat_mode=chat_mode,
+        plan_mode=plan_mode,
+        ask_mode=ask_mode,
+        context_paths=context_paths,
+        session_title=session_title,
+    )
+    # Heavy inject stack only when not in a run/fix sprint
+    if not sprint:
+        try:
+            auto_turn = (HQ / "knowledge" / "juno-auto-turn.md").read_text(encoding="utf-8")
+            if "<!-- INJECT:auto-turn -->" in auto_turn:
+                block = auto_turn.split("<!-- INJECT:auto-turn -->", 1)[1].split("<!-- END:auto-turn -->", 1)[0].strip()
+                if block and api_msgs and api_msgs[0].get("role") == "system":
+                    api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
+        except OSError:
+            pass
+        try:
+            ph = (HQ / "knowledge" / "juno-problem-handling.md").read_text(encoding="utf-8")
+            if "<!-- INJECT:problem-handling -->" in ph:
+                block = ph.split("<!-- INJECT:problem-handling -->", 1)[1].split("<!-- END:problem-handling -->", 1)[0].strip()
+                if block and api_msgs and api_msgs[0].get("role") == "system":
+                    api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
+        except OSError:
+            pass
+    try:
+        fo = (HQ / "knowledge" / "juno-file-ops.md").read_text(encoding="utf-8")
+        if "<!-- INJECT:file-ops -->" in fo:
+            block = fo.split("<!-- INJECT:file-ops -->", 1)[1].split("<!-- END:file-ops -->", 1)[0].strip()
+            if block and api_msgs and api_msgs[0].get("role") == "system":
+                api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
+    except OSError:
+        pass
+
+    if not sprint:
+        try:
+            po = (HQ / "knowledge" / "juno-port-ops.md").read_text(encoding="utf-8")
+            if "<!-- INJECT:port-ops -->" in po:
+                block = po.split("<!-- INJECT:port-ops -->", 1)[1].split("<!-- END:port-ops -->", 1)[0].strip()
+                if block and api_msgs and api_msgs[0].get("role") == "system":
+                    api_msgs[0]["content"] = (api_msgs[0].get("content") or "") + "\n\n" + block
+        except OSError:
+            pass
+    elif api_msgs and api_msgs[0].get("role") == "system":
+        api_msgs[0]["content"] = (
+            (api_msgs[0].get("content") or "")
+            + "\n\n## Action sprint\n"
+            "User wants run/fix now. Prefer: resolve project path → list/read configs → "
+            "run_shell (pnpm/npm/dev) or str_replace. Skip long analysis and web_search."
+        )
+
+    # Tools / lookup need a plan; light chat answers must NOT be forced into think theater
+    # Action sprints skip forced think — go straight to tools
+    force_lookup = (not sprint) and juno_orchestrator.needs_topic_lookup(user_message)
+    force_plan = (not sprint) and bool(use_native) and (should_tools or force_lookup) and not light
+    # Situation / design / multi-constraint: nudge think. Identity/hi never.
+    force_any_think = (
+        (not sprint)
+        and bool(use_native)
+        and not light
+        and juno_brain.needs_deliberation(user_message, prior)
+    )
+    want_visual = juno_orchestrator.wants_visual(user_message)
+    visual_retry = False
+    lookup_retry = False
+    pending_verify = False
+    verify_nudge_sent = False
+    edited_paths: list[str] = []
 
     def _emit_thinking_row(text: str, *, think_id: str, phase: str = "done"):
         body = (text or "").strip()
@@ -744,10 +790,47 @@ def run_agent_stream_events(
             force=force_plan and not saw_reasoning,
             think_done=think_count >= 1 or saw_reasoning,
         )
+        # Normalize explore signatures so path A/B vs A\B don't bypass the guard
+        sig_args = dict(call["args"] or {})
+        for pk in ("path", "cwd"):
+            if pk in sig_args and isinstance(sig_args[pk], str):
+                sig_args[pk] = sig_args[pk].replace("/", "\\").rstrip("\\").lower()
+        sig = call["name"] + ":" + json.dumps(sig_args, sort_keys=True, ensure_ascii=False)
         if blocked:
             result = blocked
         else:
-            result = juno_tools.run_tool(call["name"], call["args"])
+            same_ok = sum(1 for s, ok in recent_sigs if s == sig and ok)
+            same_fail = sum(1 for s, ok in recent_sigs if s == sig and not ok)
+            # Screenshot case: endless Listed run — block identical successful explores
+            if same_ok >= 1 and call["name"] in (
+                "list_dir",
+                "glob",
+                "grep",
+                "search_index",
+                "find_project",
+                "read_file",
+                "run_shell",
+            ):
+                result = {
+                    "ok": False,
+                    "error": "重复探索已拦截",
+                    "loop_guard": (
+                        "同一工具+参数已成功执行过：禁止再 list/glob/grep/shell 同一操作。"
+                        "请用已有结果：进入更具体子目录、read 目标文件，或直接回答用户。"
+                        "若路径曾被截断，用附件里的完整 source_path / find_project，不要猜半截路径。"
+                    ),
+                }
+            elif same_fail >= 1:
+                result = {
+                    "ok": False,
+                    "error": "重复失败已拦截",
+                    "loop_guard": (
+                        "同一工具+参数已连续失败：禁止再试；用 find_project / 完整绝对路径，"
+                        "或根据已有结果直接回答。"
+                    ),
+                }
+            else:
+                result = juno_tools.run_tool(call["name"], call["args"])
 
         if is_think:
             if result.get("ok"):
@@ -779,15 +862,6 @@ def run_agent_stream_events(
                 pending_verify = False
                 verify_nudge_sent = False
 
-        sig = call["name"] + ":" + json.dumps(call["args"], sort_keys=True, ensure_ascii=False)
-        if not result.get("ok"):
-            same_fail = sum(1 for s, ok in recent_sigs if s == sig and not ok)
-            if same_fail >= 1:
-                result = dict(result)
-                result["loop_guard"] = (
-                    "同一工具+参数已连续失败：禁止再试；用 glob/search_index/list_dir 换路径，"
-                    "或直接根据已有结果回答用户。"
-                )
         recent_sigs.append((sig, bool(result.get("ok"))))
         if len(recent_sigs) > 8:
             recent_sigs.pop(0)

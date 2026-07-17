@@ -35,7 +35,7 @@ def is_available() -> bool:
         return False
 
 
-def embed_text(text: str, *, timeout: int = 30) -> list[float] | None:
+def embed_text(text: str, *, timeout: int = 8) -> list[float] | None:
     t = (text or "").strip()[:4000]
     if not t:
         return None
@@ -88,17 +88,19 @@ def rerank(query: str, hits: list[dict], *, top_k: int = 6, alpha: float = 0.45)
     """Hybrid re-rank: alpha * TF-IDF norm + (1-alpha) * cosine."""
     if not hits:
         return []
-    qv = embed_text(query)
+    # Cap candidates — embedding each hit can stall Agent for minutes
+    candidates = hits[: min(len(hits), max(top_k * 2, 8))]
+    qv = embed_text(query, timeout=5)
     if not qv:
         return hits[:top_k]
 
-    max_tf = max((h.get("score") or 0) for h in hits) or 1.0
+    max_tf = max((h.get("score") or 0) for h in candidates) or 1.0
     scored: list[tuple[float, dict]] = []
-    for h in hits:
+    for h in candidates:
         cid = h.get("chunk_id")
         text = h.get("text") or ""
         tf_norm = (h.get("score") or 0) / max_tf
-        cv = get_chunk_vector(int(cid), text) if cid is not None else embed_text(text[:900])
+        cv = get_chunk_vector(int(cid), text) if cid is not None else embed_text(text[:900], timeout=5)
         cos = cosine(qv, cv) if cv else 0.0
         hybrid = alpha * tf_norm + (1 - alpha) * cos
         item = dict(h)

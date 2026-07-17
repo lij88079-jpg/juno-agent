@@ -42,6 +42,19 @@ _SHELL_DENY_RE = re.compile(
     r")"
 )
 
+# Explore-via-shell: dir /s through node_modules freezes Agent; type duplicates read_file.
+_SHELL_EXPLORE_RE = re.compile(
+    r"(?is)"
+    r"("
+    r"\bdir\b[^&\n|]*?/s\b"
+    r"|\bGet-ChildItem\b[^&\n|]*?-Recurse\b"
+    r"|\btree\s+[\"']?[A-Za-z]:"
+    r"|\b(type|Get-Content|\bgc\b)\s+[\"']?[A-Za-z]:\\"
+    r"|\b(type|Get-Content|\bgc\b)\s+[\"'][^\"']+\.(vue|ts|tsx|js|jsx|py|md|json|css|html)\b"
+    r"|\bwhoami\b"
+    r")"
+)
+
 
 def set_readonly(enabled: bool = True) -> None:
     global _READONLY
@@ -138,8 +151,20 @@ def load_projects() -> list[dict]:
 
 def resolve_project_alias(name: str) -> dict | None:
     """Match user wording to a registered project (alias / id / folder name)."""
-    q = (name or "").strip()
+    q = (name or "").strip().strip('"').strip("'")
     if not q:
+        return None
+    # Filesystem paths must never go through alias substring matching
+    # (e.g. ...\my-ai-agent\scripts would falsely match alias "my-ai-agent" → HQ root)
+    if (
+        re.match(r"^[a-zA-Z]:[\\/]", q)
+        or q.startswith("\\\\")
+        or "/" in q
+        or "\\" in q
+        or q in {".", "./", "..", ".\\"}
+        or q.startswith("./")
+        or q.startswith(".\\")
+    ):
         return None
     q_lower = q.lower()
     projects = load_projects()
@@ -277,6 +302,27 @@ def _drive_roots() -> list[Path]:
     return out
 
 
+_SKIP_DIR_NAMES = frozenset({
+    "node_modules",
+    ".git",
+    ".next",
+    "dist",
+    "build",
+    ".nuxt",
+    ".output",
+    "coverage",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "target",
+    ".turbo",
+    ".cache",
+    "vendor",
+    "pnpm-store",
+    ".pnpm-store",
+})
+
+
 def _blocked_read_path(p: Path) -> bool:
     s = str(p).lower().replace("/", "\\")
     blocks = (
@@ -289,6 +335,9 @@ def _blocked_read_path(p: Path) -> bool:
     )
     if any(b in s for b in blocks):
         return True
+    # Heavy dependency / build trees — never walk these for grep/glob resolve
+    if any(part.lower() in _SKIP_DIR_NAMES for part in p.parts):
+        return True
     if not _is_unrestricted_read():
         if p.suffix.lower() in {".exe", ".dll", ".msi", ".cab", ".iso"}:
             return True
@@ -298,6 +347,32 @@ def _blocked_read_path(p: Path) -> bool:
         except OSError:
             return True
     return False
+
+
+def _iter_files_fast(root: Path, *, max_files: int = 4000):
+    """Walk files under root, skipping heavy dirs. Never materialize full tree."""
+    stack = [root]
+    n = 0
+    while stack and n < max_files:
+        cur = stack.pop()
+        try:
+            with os.scandir(cur) as it:
+                for ent in it:
+                    name = ent.name
+                    try:
+                        if ent.is_dir(follow_symlinks=False):
+                            if name.lower() in _SKIP_DIR_NAMES:
+                                continue
+                            stack.append(Path(ent.path))
+                        elif ent.is_file(follow_symlinks=False):
+                            yield Path(ent.path)
+                            n += 1
+                            if n >= max_files:
+                                return
+                    except OSError:
+                        continue
+        except OSError:
+            continue
 
 
 def _merge_roots(*groups: list[Path]) -> list[Path]:
@@ -416,22 +491,57 @@ def format_tool_roots_block() -> str:
     lines.append(f"- **shellPolicy={shell}**：" + (
         "开放（近似 Cursor，仅拦高危破坏命令）" if shell == "open" else "白名单前缀匹配"
     ))
+    lines.append("- 浏览/读代码：list_dir / glob / grep / read_file；**禁止** dir /s、type、Get-Content 代替")
     lines.append("- 写入范围见 tools.writeRoots（含 Desktop / 本会话信任路径）")
     lines.append("- 搜空：换根 / find_project / Desktop list_dir；改完：read_file + read_lints 再终答")
     return "\n".join(lines)
 
 
+# Quoted paths first; bare paths may include spaces (e.g. C:\Users\solut xc\...).
+# Old pattern used \s and truncated at the username space → "路径被截断了" death spiral.
 PATH_IN_TEXT_RE = re.compile(
-    r"(?:[A-Za-z]:\\(?:[^\\/\s\"<>|]+\\)*[^\\/\s\"<>|]*)"
-    r"|(?:/(?:[\w.\-]+/)*[\w.\-]+)"
+    r'"(?P<quoted>[A-Za-z]:\\[^"\n]+)"'
+    r"|(?P<bare>[A-Za-z]:\\[^\n\"<>|*?]+)"
+    r"|(?P<unix>/(?:[\w.\-]+/)*[\w.\-]+)"
 )
+
+
+def _refine_extracted_path(raw: str) -> str:
+    """Trim run-on text after Windows paths; keep spaces inside real paths."""
+    p = (raw or "").strip().strip('"').strip("'")
+    p = p.rstrip(".,;:!?）)】\"'")
+    # Cut at first CJK — common: `D:\proj 里改一下`
+    for i, ch in enumerate(p):
+        if "\u4e00" <= ch <= "\u9fff":
+            p = p[:i].rstrip()
+            break
+    if not p:
+        return p
+    try:
+        if Path(p).exists():
+            return str(Path(p))
+    except OSError:
+        return p
+    # Over-captured trailing English words: peel space-separated tokens until path exists
+    cand = p
+    while " " in cand:
+        cand = cand.rsplit(" ", 1)[0].rstrip("\\/ ")
+        if not cand:
+            break
+        try:
+            if Path(cand).exists():
+                return str(Path(cand))
+        except OSError:
+            break
+    return p
 
 
 def extract_paths_from_text(text: str) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
     for m in PATH_IN_TEXT_RE.finditer(text or ""):
-        p = m.group(0).strip().rstrip(".,;:!?）)】\"'")
+        raw = m.group("quoted") or m.group("bare") or m.group("unix") or m.group(0)
+        p = _refine_extracted_path(raw)
         if len(p) < 3 or p in seen:
             continue
         seen.add(p)
@@ -545,7 +655,7 @@ def _smart_resolve(path_str: str) -> Path | None:
                 continue
         if ok_root and candidate.exists():
             return candidate
-    # Single-segment basename: scripts/foo.py → rglob once
+    # Basename search — fast walk (skips node_modules/.git/…); never full rglob
     parts = [p for p in norm.split("\\") if p]
     if parts:
         tail = parts[-1]
@@ -553,8 +663,8 @@ def _smart_resolve(path_str: str) -> Path | None:
             found: list[Path] = []
             for root in _tool_roots():
                 try:
-                    for hit in root.rglob(tail):
-                        if _blocked_read_path(hit):
+                    for hit in _iter_files_fast(root, max_files=2500):
+                        if hit.name != tail or _blocked_read_path(hit):
                             continue
                         for r in _read_roots():
                             try:
@@ -567,10 +677,11 @@ def _smart_resolve(path_str: str) -> Path | None:
                             break
                 except OSError:
                     continue
+                if len(found) >= 6:
+                    break
             if len(found) == 1:
                 return found[0]
             if len(found) > 1:
-                # Let caller surface ambiguity
                 return None
     return None
 
@@ -694,11 +805,14 @@ def tool_grep(pattern: str, path: str = ".", *, max_hits: int = 30, context: int
     rg = shutil.which("rg")
     if rg:
         cmd = [rg, "-n", "--no-heading", "--color=never", "-m", str(max_hits)]
+        # Skip dependency/build trees — otherwise rg on project root feels "stuck"
+        for d in sorted(_SKIP_DIR_NAMES):
+            cmd.extend(["--glob", f"!{d}/**", "--glob", f"!**/{d}/**"])
         if context:
             cmd.extend(["-C", str(context)])
         cmd.extend(["-e", pattern, str(fp)])
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=12, encoding="utf-8", errors="replace")
             hits = []
             for line in (proc.stdout or "").splitlines():
                 parts = line.split(":", 2)
@@ -717,9 +831,12 @@ def tool_grep(pattern: str, path: str = ".", *, max_hits: int = 30, context: int
     except re.error as e:
         return {"ok": False, "error": f"无效正则: {e}"}
     hits = []
-    files = [fp] if fp.is_file() else list(fp.rglob("*"))
+    files = [fp] if fp.is_file() else _iter_files_fast(fp, max_files=2500)
     for f in files:
-        if not f.is_file() or f.stat().st_size > 512_000:
+        try:
+            if not f.is_file() or f.stat().st_size > 512_000:
+                continue
+        except OSError:
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
@@ -757,12 +874,25 @@ def tool_glob(pattern: str, path: str = ".", *, max_matches: int = 40) -> dict:
         return out
 
     def _collect(root: Path) -> list[str]:
+        import fnmatch
+
         found: list[str] = []
         try:
-            for item in root.glob(pat):
-                found.append(str(item))
-                if len(found) >= max_matches:
-                    break
+            # ** patterns: pathlib walks node_modules forever — use capped skip-walk
+            if "**" in pat:
+                for item in _iter_files_fast(root, max_files=3000):
+                    rel = str(item.relative_to(root)).replace("\\", "/")
+                    if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(item.name, pat):
+                        found.append(str(item))
+                        if len(found) >= max_matches:
+                            break
+            else:
+                for item in root.glob(pat):
+                    if any(part.lower() in _SKIP_DIR_NAMES for part in item.parts):
+                        continue
+                    found.append(str(item))
+                    if len(found) >= max_matches:
+                        break
         except OSError:
             pass
         return found
@@ -795,6 +925,11 @@ def tool_glob(pattern: str, path: str = ".", *, max_matches: int = 40) -> dict:
         "matches": matches,
         "scanned_roots": scanned[:8],
     }
+    if "**" in pat:
+        result["hint_explore"] = (
+            "根目录 ** glob 很慢且易空转。优先：list_dir 顶层 → 对 frontend/src 等子目录 glob；"
+            "禁止对同一 pattern+path 重复 glob。"
+        )
     if not matches:
         result["search_empty"] = True
         result["hint"] = (
@@ -1360,6 +1495,25 @@ def _shell_denied(cmd: str) -> bool:
     return bool(_SHELL_DENY_RE.search(cmd or ""))
 
 
+def _shell_explore_misuse(cmd: str) -> str | None:
+    """Return hint if shell is being used as a slow substitute for list/read/glob."""
+    c = cmd or ""
+    if not _SHELL_EXPLORE_RE.search(c):
+        return None
+    if re.search(r"(?is)\bdir\b[^&\n|]*?/s\b|\bGet-ChildItem\b[^&\n|]*?-Recurse\b|\btree\s+", c):
+        return (
+            "禁止用 dir /s / Get-ChildItem -Recurse / tree 扫项目根（会钻进 node_modules，极慢）。"
+            "改用 list_dir（浅列）或 glob/grep（已跳过依赖目录）。"
+        )
+    if re.search(r"(?is)\b(type|Get-Content|\bgc\b)\b", c):
+        return (
+            "禁止用 type/Get-Content 读源码。改用 read_file(path, offset, limit)，路径用完整绝对路径并加引号。"
+        )
+    if re.search(r"(?is)\bwhoami\b", c):
+        return "不必 whoami；继续用 list_dir/read_file/glob 完成用户任务。"
+    return "请用 list_dir / glob / read_file，不要用 shell 代替文件探索。"
+
+
 def _shell_allowed(cmd: str) -> bool:
     c = (cmd or "").strip()
     if not c:
@@ -1571,6 +1725,15 @@ def get_shell_job(job_id: str, *, offset: int = 0) -> dict:
 
 
 def tool_run_shell(command: str, *, cwd: str | None = None) -> dict:
+    explore_hint = _shell_explore_misuse(command)
+    if explore_hint:
+        return {
+            "ok": False,
+            "error": "已拦截：请用专用文件工具，不要用 shell 扫盘/读文件",
+            "hint": explore_hint,
+            "next_tools": ["list_dir", "glob", "grep", "read_file", "find_project"],
+            "command": command,
+        }
     if not _shell_allowed(command):
         if _shell_denied(command):
             return {
@@ -1907,15 +2070,13 @@ def list_browsable_files(*, q: str = "", limit: int = 80) -> list[dict]:
         if items:
             return items[:limit]
 
-    max_scan = 3000
-    scanned = 0
     for root in _read_roots():
         try:
-            for fp in root.rglob("*"):
-                scanned += 1
-                if scanned > max_scan:
-                    break
-                if not fp.is_file() or fp.stat().st_size > 2_000_000:
+            for fp in _iter_files_fast(root, max_files=2000):
+                try:
+                    if not fp.is_file() or fp.stat().st_size > 2_000_000:
+                        continue
+                except OSError:
                     continue
                 rel = str(fp.relative_to(root)).replace("\\", "/")
                 label = f"{root.name}/{rel}"

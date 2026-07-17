@@ -137,7 +137,8 @@ def attach_folder(session_id: str, dir_path: Path, *, max_files: int = 30) -> di
     """Pack folder tree + text file snippets into one attachable document."""
     import juno_tools
 
-    tree = juno_tools.list_dir_tree(str(dir_path), depth=3)
+    juno_tools.trust_user_path(str(dir_path))
+    tree = juno_tools.list_dir_tree(str(dir_path), depth=2, max_nodes=120)
     parts = [
         f"# 文件夹 · `{dir_path}`",
         "",
@@ -147,22 +148,17 @@ def attach_folder(session_id: str, dir_path: Path, *, max_files: int = 30) -> di
         "```",
         "",
         "## 文件内容（文本类 · 自动采样）",
+        "",
+        f"（已跳过 node_modules/.git/dist 等；最多采样 {max_files} 个文本文件）",
     ]
     total_chars = sum(len(p) for p in parts)
     file_count = 0
-    skip_dirs = juno_tools.SKIP_TREE_NAMES
 
-    try:
-        candidates = sorted(dir_path.rglob("*"), key=lambda p: (len(p.parts), str(p).lower()))
-    except OSError as e:
-        return {"ok": False, "error": str(e)}
-
-    for fp in candidates:
+    # Never rglob the whole tree — node_modules makes "drop project root" feel frozen
+    for fp in juno_tools._iter_files_fast(dir_path, max_files=2500):
         if file_count >= max_files or total_chars >= MAX_INJECT_CHARS - 2000:
             break
         if not fp.is_file():
-            continue
-        if any(part in skip_dirs for part in fp.parts):
             continue
         ext = fp.suffix.lower()
         if ext not in ALLOWED_EXT and ext != "":
@@ -172,14 +168,21 @@ def attach_folder(session_id: str, dir_path: Path, *, max_files: int = 30) -> di
         except OSError:
             continue
         if size > 200_000:
-            parts.append(f"\n### `{fp.relative_to(dir_path)}`（跳过，>{size // 1024}KB）")
+            try:
+                rel = str(fp.relative_to(dir_path)).replace("\\", "/")
+            except ValueError:
+                rel = fp.name
+            parts.append(f"\n### `{rel}`（跳过，>{size // 1024}KB）")
             continue
         try:
             text = fp.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         chunk = text[:4000]
-        rel = str(fp.relative_to(dir_path)).replace("\\", "/")
+        try:
+            rel = str(fp.relative_to(dir_path)).replace("\\", "/")
+        except ValueError:
+            rel = fp.name
         block = f"\n### `{rel}`\n```\n{chunk}\n```"
         parts.append(block)
         total_chars += len(block)

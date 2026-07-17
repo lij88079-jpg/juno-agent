@@ -199,7 +199,8 @@ def search(query: str, *, top_k: int | None = None) -> list[dict]:
         )
 
     index_cfg = cfg.get("index") or {}
-    if index_cfg.get("hybridEmbed") is not False and out:
+    # Opt-in only: hybrid embed needs Ollama; default off so cloud-only setups stay fast
+    if index_cfg.get("hybridEmbed") is True and out:
         try:
             import juno_embed
             if juno_embed.is_available():
